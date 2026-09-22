@@ -34,6 +34,7 @@ export async function createTestHarness(opts: { seed?: boolean; flags?: ServiceC
   const demo = buildDemoData(new Date(), keyRing);
   if (opts.seed !== false) {
     await loadDemoData(db, demo);
+    for (const f of demo.files) await storage.put(f.key, f.bytes, f.mimeType).catch(() => undefined);
   } else {
     // People and organizations only.
     await loadDemoData(db, { rows: { profiles: demo.rows.profiles, organizations: demo.rows.organizations, organization_members: demo.rows.organization_members, organization_settings: demo.rows.organization_settings }, files: [] });

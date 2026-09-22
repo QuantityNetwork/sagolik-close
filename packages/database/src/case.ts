@@ -1,10 +1,10 @@
 /** Top-level key conversion between TypeScript (camelCase) and SQL (snake_case). JSON column contents are left untouched. */
 export function toSnake(key: string): string {
-  return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`).replace(/([a-z])(\d)/g, "$1_$2");
+  return key.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
 }
 
 export function toCamel(key: string): string {
-  return key.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
+  return key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 }
 
 export function rowToSnake(row: Record<string, unknown>): Record<string, unknown> {

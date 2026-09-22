@@ -152,8 +152,8 @@ create table public.organization_branding (
 create table public.properties (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid references public.organizations (id),
-  address_line_1 text not null,
-  address_line_2 text,
+  address_line1 text not null,
+  address_line2 text,
   city text not null,
   region text,
   postal_code text,
