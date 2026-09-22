@@ -912,6 +912,15 @@ create table public.consent_records (
   created_at timestamptz not null default now()
 );
 
+create table public.mfa_recovery_codes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  code_hash char(64) not null,
+  used_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique (user_id, code_hash)
+);
+
 create table public.idempotency_keys (
   id uuid primary key default gen_random_uuid(),
   key text not null,

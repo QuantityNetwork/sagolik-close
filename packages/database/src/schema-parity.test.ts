@@ -97,7 +97,7 @@ describe("schema parity", () => {
   });
 
   it("secret tables have no client policies", () => {
-    for (const t of ["bank_connection_secrets", "integration_credentials", "webhook_events", "domain_events", "idempotency_keys", "security_signals"]) {
+    for (const t of ["bank_connection_secrets", "integration_credentials", "webhook_events", "domain_events", "idempotency_keys", "security_signals", "mfa_recovery_codes"]) {
       expect(sql).not.toMatch(new RegExp(`create policy [^;]* on public\\.${t}\\b`));
     }
   });

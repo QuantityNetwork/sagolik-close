@@ -302,4 +302,4 @@ create policy "consent: own read" on public.consent_records for select to authen
 create policy "consent: own insert" on public.consent_records for insert to authenticated with check (user_id = auth.uid());
 
 -- No policies (service role only): integrations, integration_credentials, bank_connection_secrets,
--- webhook_events, domain_events, idempotency_keys, security_signals.
+-- webhook_events, domain_events, idempotency_keys, security_signals, mfa_recovery_codes.

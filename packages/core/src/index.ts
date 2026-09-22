@@ -23,3 +23,4 @@ export * from "./services/reactions";
 export * from "./services/views";
 export * from "./services/assistant";
 export * from "./services/governance";
+export * from "./services/account";

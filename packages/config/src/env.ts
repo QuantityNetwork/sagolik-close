@@ -44,6 +44,8 @@ const EnvSchema = z.object({
 
   RESEND_API_KEY: optional,
   EMAIL_FROM: z.string().default("Sagolik Close <no-reply@close.sagolik.com>"),
+  /** Where contact-form enquiries are delivered. Unset → enquiries are only kept in the outbox (demo). */
+  CONTACT_INBOX: optional,
   TWILIO_ACCOUNT_SID: optional,
   TWILIO_AUTH_TOKEN: optional,
   TWILIO_FROM_NUMBER: optional,

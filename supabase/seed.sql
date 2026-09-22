@@ -311,7 +311,7 @@ insert into public.bank_connections (id, user_id, transaction_id, provider, inst
 
 -- bank_connection_secrets
 insert into public.bank_connection_secrets (id, connection_id, encrypted_access_token, key_version, created_at) values
-  ('3978d0f3-ded4-48b0-b373-1fb8b4c9536e', '50c4d9ac-9294-480d-9e06-a278c6ead3e7', 'v1.CwLUbtGfIx5LUywX.3nxNRrGzTYoo4IDdBsSVGA.P_6QtOMtjMeu4bSmAZ_OfTwCQq_2WA1aHGY', 1, ('2026-08-28T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
+  ('3978d0f3-ded4-48b0-b373-1fb8b4c9536e', '50c4d9ac-9294-480d-9e06-a278c6ead3e7', 'v1.wMbqXQ5H7qypUWGE.g7cXdmAYf1OcbWXJVLfMWA.Qf90ZdwjHzSyo5rp2K2tIA4Q39bvcrTOd28', 1, ('2026-08-28T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
 
 -- bank_accounts
 insert into public.bank_accounts (id, connection_id, user_id, external_account_id, name, mask, currency, available_balance, current_balance, balance_as_of, owner_names, ownership_verified, ownership_verified_at, created_at, updated_at) values
@@ -320,7 +320,7 @@ insert into public.bank_accounts (id, connection_id, user_id, external_account_i
 
 -- bank_instructions
 insert into public.bank_instructions (id, transaction_id, purpose, beneficiary_name, bank_name, account_mask, routing_identifier, encrypted_account_number, currency, status, version, previous_version_id, verified_by, verified_at, verification_method, effective_after, created_by, created_at) values
-  ('63481d6a-6f90-49f9-855d-d7c4b8247b9a', 'a8db1096-1336-4467-8fd9-6415bd8939c0', 'closing_funds_to_escrow', 'Maple Title & Escrow (Demo) — Trust Account', 'Sandbox National Bank', '6789', '021000021', 'v1.Uc540TrMzkfhIdTp.bFGJFBrmmhH5IyUeZVGMgw.prkEnb3ON7m45I7H', 'USD', 'verified', 1, null, '43964358-5d5f-4521-a52c-63562021c400', ('2026-08-27T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), 'out_of_band_call', null, '4a6a4324-5fc8-4baa-a828-14210de77d3c', ('2026-08-26T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
+  ('63481d6a-6f90-49f9-855d-d7c4b8247b9a', 'a8db1096-1336-4467-8fd9-6415bd8939c0', 'closing_funds_to_escrow', 'Maple Title & Escrow (Demo) — Trust Account', 'Sandbox National Bank', '6789', '021000021', 'v1.JqPJ1znvwJRleJXi.gZ_lC2O-WOJdoMBQ3yucfQ.Vh1NG5Pv4ne7xGXc', 'USD', 'verified', 1, null, '43964358-5d5f-4521-a52c-63562021c400', ('2026-08-27T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), 'out_of_band_call', null, '4a6a4324-5fc8-4baa-a828-14210de77d3c', ('2026-08-26T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
 
 -- payments
 insert into public.payments (id, transaction_id, type, rail, status, amount, currency, from_account_id, bank_instruction_id, provider, external_payment_id, idempotency_key, initiated_by, approved_by, requires_dual_approval, settled_at, failure_reason, created_at, updated_at) values

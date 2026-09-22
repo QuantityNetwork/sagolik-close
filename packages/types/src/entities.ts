@@ -823,6 +823,16 @@ export const Subscription = z.object({
 });
 export type Subscription = z.infer<typeof Subscription>;
 
+/** Single-use MFA recovery codes (hashes only). Service-role access only. */
+export const MfaRecoveryCode = z.object({
+  id: Uuid,
+  userId: Uuid,
+  codeHash: z.string().length(64),
+  usedAt: nullable(Timestamp),
+  createdAt: Timestamp,
+});
+export type MfaRecoveryCode = z.infer<typeof MfaRecoveryCode>;
+
 export const ConsentRecord = z.object({
   id: Uuid,
   userId: Uuid,
@@ -903,6 +913,7 @@ export const TABLE_SCHEMAS = {
   subscriptions: Subscription,
   consent_records: ConsentRecord,
   idempotency_keys: IdempotencyKey,
+  mfa_recovery_codes: MfaRecoveryCode,
 } as const;
 
 export type TableName = keyof typeof TABLE_SCHEMAS;

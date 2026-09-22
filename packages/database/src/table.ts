@@ -84,4 +84,5 @@ export const UNIQUE_KEYS: Partial<Record<TableName, string[][]>> = {
   feature_flags: [["key"]],
   plans: [["key"]],
   idempotency_keys: [["key", "userId", "route"]],
+  mfa_recovery_codes: [["userId", "codeHash"]],
 };

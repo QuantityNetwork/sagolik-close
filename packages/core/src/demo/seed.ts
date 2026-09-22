@@ -756,6 +756,7 @@ export const SEED_ORDER: TableName[] = [
   "subscriptions",
   "consent_records",
   "idempotency_keys",
+  "mfa_recovery_codes",
 ];
 
 export async function loadDemoData(db: Db, data: DemoData) {
