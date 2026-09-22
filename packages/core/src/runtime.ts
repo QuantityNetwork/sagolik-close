@@ -1,0 +1,158 @@
+/**
+ * Process runtime shared by the web app and the worker.
+ *
+ *  - Supabase configured → PostgreSQL via service client for writes,
+ *    Supabase Storage for the vault.
+ *  - Not configured → LOCAL demo mode: in-memory store seeded with the
+ *    fictional demo environment, in-memory vault, sandbox providers.
+ */
+import type { Actor } from "@sagolik/auth";
+import { type Env, type FlagOverride, getEnv, LOCAL_ENCRYPTION_KEYS } from "@sagolik/config";
+import { createMemoryDb, createSupabaseDb, type Db } from "@sagolik/database";
+import {
+  createProviders,
+  globalSingleton,
+  MOCK_SIGNATURE_HEADER,
+  type Providers,
+  setMockWebhookSink,
+} from "@sagolik/integrations";
+import { decryptField, type KeyRing, parseKeyRing } from "@sagolik/security";
+import { newCorrelationId } from "@sagolik/audit";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { consoleLogger, type Logger, type ServiceContext } from "./context";
+import { buildDemoData, loadDemoData } from "./demo/seed";
+import { registerReactions } from "./services/reactions";
+import { handleWebhook } from "./services/webhooks";
+import { type DocumentStorage, MemoryDocumentStorage, SupabaseDocumentStorage } from "./storage";
+
+export interface Runtime {
+  env: Env;
+  mode: "memory" | "supabase";
+  providers: Providers;
+  keyRing: KeyRing;
+  /** Service-level store (writes, system work). */
+  serviceDb: Db;
+  storage: DocumentStorage;
+  serviceClient: SupabaseClient | null;
+  log: Logger;
+}
+
+async function init(): Promise<Runtime> {
+  const env = getEnv();
+  const keyRing = parseKeyRing(env.DATA_ENCRYPTION_KEYS ?? LOCAL_ENCRYPTION_KEYS);
+  const providers = createProviders(env);
+  const log = consoleLogger;
+  registerReactions();
+
+  let serviceDb: Db;
+  let storage: DocumentStorage;
+  let serviceClient: SupabaseClient | null = null;
+  let mode: Runtime["mode"];
+
+  if (env.supabaseConfigured && env.SUPABASE_SERVICE_ROLE_KEY) {
+    mode = "supabase";
+    serviceClient = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    serviceDb = createSupabaseDb(serviceClient);
+    storage = new SupabaseDocumentStorage(serviceClient);
+  } else {
+    mode = "memory";
+    serviceDb = createMemoryDb();
+    storage = new MemoryDocumentStorage();
+    const demo = buildDemoData(new Date(), keyRing);
+    await loadDemoData(serviceDb, demo);
+    for (const f of demo.files) await storage.put(f.key, f.bytes, f.mimeType).catch(() => undefined);
+    log.info("runtime: LOCAL demo mode (in-memory store, sandbox providers, fictional data)");
+  }
+
+  const runtime: Runtime = { env, mode, providers, keyRing, serviceDb, storage, serviceClient, log };
+
+  // Sandbox providers deliver signed webhooks through the same pipeline real providers use.
+  setMockWebhookSink(async (providerId, rawBody, signature) => {
+    const ctx = systemContext(runtime, `webhook:${providerId}`);
+    const outcome = await handleWebhook(ctx, providerId, rawBody, new Headers({ [MOCK_SIGNATURE_HEADER]: signature }));
+    if (outcome.status === "failed" || outcome.status === "rejected") log.warn("sandbox webhook not processed", { providerId, outcome: outcome.status });
+  });
+  await hydrateSandboxProviders(runtime);
+  return runtime;
+}
+
+export function getRuntime(): Promise<Runtime> {
+  return globalSingleton("runtime", () => init());
+}
+
+/** Restore sandbox provider state from persisted records so seeded/demo flows keep working across restarts. */
+async function hydrateSandboxProviders(rt: Runtime) {
+  const db = rt.serviceDb;
+  const { signatures, banking, payments } = rt.providers.mocks;
+  if (signatures) {
+    for (const sig of await db.document_signatures.find({ provider: signatures.info.id, status: ["sent", "viewed", "signed"] })) {
+      const doc = await db.documents.get(sig.documentId);
+      const v = await db.document_versions.findOne({ documentId: sig.documentId, version: sig.documentVersion });
+      if (!doc || !v) continue;
+      signatures.hydrate({
+        id: sig.externalEnvelopeId,
+        documentName: doc.name,
+        documentSha256: v.sha256,
+        status: sig.status,
+        recipients: sig.recipients.map((r, i) => ({ recipientId: r.participantId, name: r.name, email: r.email, routingOrder: i + 1, status: r.status, signedAt: r.signedAt })),
+      });
+    }
+  }
+  if (banking) {
+    for (const conn of await db.bank_connections.find({ provider: banking.info.id, status: ["connected", "reauthentication_required"] })) {
+      const secret = await db.bank_connection_secrets.findOne({ connectionId: conn.id });
+      const profile = await db.profiles.get(conn.userId);
+      if (!secret || !profile || !conn.externalConnectionId) continue;
+      const accounts = await db.bank_accounts.find({ connectionId: conn.id }, { orderBy: "createdAt" });
+      banking.seedConnection({
+        accessToken: decryptField(secret.encryptedAccessToken, rt.keyRing, `bank_connection:${conn.id}`),
+        externalConnectionId: conn.externalConnectionId,
+        institutionId: conn.institutionId,
+        ownerName: profile.fullName,
+        seed: 1,
+        masks: [accounts[0]?.mask ?? "0000", accounts[1]?.mask ?? "0001"],
+      });
+    }
+  }
+  if (payments) {
+    for (const p of await db.payments.find({ provider: payments.info.id })) {
+      if (p.externalPaymentId) payments.hydrate({ id: p.externalPaymentId, idempotencyKey: p.idempotencyKey, amount: p.amount, currency: p.currency, status: p.status });
+    }
+  }
+}
+
+/** Feature-flag overrides from the database (+ demo defaults so sandbox flows are visible). */
+export async function loadFlags(rt: Runtime): Promise<FlagOverride[]> {
+  const rows = await rt.serviceDb.feature_flags.find({});
+  const overrides: FlagOverride[] = rows.map((r) => ({ key: r.key, enabled: r.enabled, rolloutPercent: r.rolloutPercent, organizationIds: r.organizationIds }));
+  if (rt.env.demoMode && !overrides.some((o) => o.key === "payment_initiation")) {
+    overrides.push({ key: "payment_initiation", enabled: true, rolloutPercent: 100, organizationIds: [] });
+  }
+  return overrides;
+}
+
+export function systemContext(rt: Runtime, source: string, flags: FlagOverride[] = []): ServiceContext {
+  return {
+    db: rt.serviceDb,
+    writer: rt.serviceDb,
+    actor: { kind: "system", source },
+    providers: rt.providers,
+    storage: rt.storage,
+    keyRing: rt.keyRing,
+    env: rt.env,
+    flags,
+    correlationId: newCorrelationId(),
+    log: rt.log,
+    now: () => new Date(),
+    outboxMode: rt.mode === "memory" ? "inline" : "worker",
+  };
+}
+
+export function userContext(rt: Runtime, actor: Actor, opts: { readerDb?: Db; flags?: FlagOverride[]; correlationId?: string } = {}): ServiceContext {
+  return {
+    ...systemContext(rt, "user", opts.flags ?? []),
+    db: opts.readerDb ?? rt.serviceDb,
+    actor,
+    correlationId: opts.correlationId ?? newCorrelationId(),
+  };
+}

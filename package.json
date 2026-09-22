@@ -1,0 +1,30 @@
+{
+  "name": "sagolik-close",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Sagolik Close \u2014 real-estate closing infrastructure. From Decision to Ownership.",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @sagolik/web dev",
+    "build": "pnpm --filter @sagolik/web build",
+    "start": "pnpm --filter @sagolik/web start",
+    "worker": "pnpm --filter @sagolik/worker start",
+    "typecheck": "pnpm -r --parallel typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:db": "bash supabase/tests/run.sh",
+    "test:e2e": "pnpm --filter @sagolik/web test:e2e",
+    "lint": "pnpm --filter @sagolik/web lint",
+    "gen:sql": "tsx scripts/gen-reference-sql.ts",
+    "gen:seed": "tsx scripts/gen-seed-sql.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.1",
+    "tsx": "^4.20.0"
+  }
+}

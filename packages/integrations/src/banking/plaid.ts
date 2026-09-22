@@ -1,0 +1,226 @@
+/**
+ * Plaid adapter (US/CA/EU aggregation).
+ *
+ * Uses Plaid Hosted Link so the person completes consent on Plaid's own
+ * pages; Sagolik never sees credentials. Endpoints used:
+ *   /link/token/create, /link/token/get, /item/public_token/exchange,
+ *   /accounts/get, /accounts/balance/get, /transactions/get, /identity/get,
+ *   /institutions/get_by_id, /institutions/get, /item/get, /item/remove
+ *
+ * Status: implemented against Plaid's documented API, exercised in Plaid
+ * sandbox. Webhook verification (JWT/ES256 via /webhook_verification_key/get)
+ * is NOT yet implemented — Plaid webhooks are rejected until it is, and
+ * connection health is polled via `refreshConnection` instead.
+ */
+import type { Currency } from "@sagolik/types";
+import { CURRENCIES } from "@sagolik/types";
+import { type NormalizedWebhook, type ProviderInfo, ProviderError, WebhookRejectedError } from "../common";
+import {
+  type BankingProvider,
+  type ConnectStart,
+  type ExchangeResult,
+  type Institution,
+  type OwnershipResult,
+  type ProviderAccount,
+  type ProviderBalance,
+  type ProviderBankTransaction,
+  namesMatch,
+} from "./provider";
+
+const HOSTS = {
+  sandbox: "https://sandbox.plaid.com",
+  development: "https://development.plaid.com",
+  production: "https://production.plaid.com",
+} as const;
+
+const USER_MESSAGES: Record<string, { message: string; action?: "reconnect_bank" | "retry" | "contact_support" }> = {
+  ITEM_LOGIN_REQUIRED: { message: "Your bank needs you to reconnect before we can refresh the account.", action: "reconnect_bank" },
+  INVALID_ACCESS_TOKEN: { message: "Your bank connection is no longer valid. Please reconnect.", action: "reconnect_bank" },
+  ITEM_NOT_FOUND: { message: "Your bank connection is no longer valid. Please reconnect.", action: "reconnect_bank" },
+  INSTITUTION_DOWN: { message: "Your bank isn't responding right now. Please try again in a little while.", action: "retry" },
+  INSTITUTION_NOT_RESPONDING: { message: "Your bank isn't responding right now. Please try again in a little while.", action: "retry" },
+  RATE_LIMIT_EXCEEDED: { message: "We're refreshing too often. Please try again in a minute.", action: "retry" },
+  PRODUCTS_NOT_SUPPORTED: { message: "This bank doesn't support the information we need. Try another account." },
+};
+
+function toCurrency(code: string | null | undefined): Currency {
+  return (CURRENCIES as readonly string[]).includes(code ?? "") ? (code as Currency) : "USD";
+}
+const minor = (v: number | null | undefined) => (v == null ? null : Math.round(v * 100));
+
+interface PlaidAccount {
+  account_id: string;
+  name: string;
+  mask: string | null;
+  subtype: string | null;
+  type: string;
+  balances: { available: number | null; current: number | null; iso_currency_code: string | null };
+  owners?: Array<{ names: string[] }>;
+}
+
+export class PlaidBankingProvider implements BankingProvider {
+  readonly info: ProviderInfo;
+  readonly supportedCountries = ["US", "CA", "GB", "IE", "FR", "ES", "NL", "DE"] as const;
+  readonly supportsPaymentInitiation = false;
+  private readonly host: string;
+
+  constructor(
+    private readonly cfg: { clientId: string; secret: string; env: keyof typeof HOSTS; webhookUrl?: string },
+    private readonly fetchImpl: typeof fetch = fetch,
+  ) {
+    this.host = HOSTS[cfg.env];
+    this.info = { id: "plaid", displayName: "Plaid", mode: cfg.env === "production" ? "production" : "sandbox" };
+  }
+
+  private async call<T>(path: string, body: Record<string, unknown>): Promise<T> {
+    let res: Response;
+    try {
+      res = await this.fetchImpl(`${this.host}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ client_id: this.cfg.clientId, secret: this.cfg.secret, ...body }),
+      });
+    } catch (cause) {
+      throw new ProviderError("plaid", "NETWORK", "We couldn't reach your bank's connection service. Please try again.", { retryable: true, cause });
+    }
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!res.ok) {
+      const code = String(json.error_code ?? `HTTP_${res.status}`);
+      const mapped = USER_MESSAGES[code];
+      throw new ProviderError("plaid", code, mapped?.message ?? "Something went wrong talking to your bank. Please try again.", {
+        retryable: res.status >= 500 || code === "RATE_LIMIT_EXCEEDED",
+        action: mapped?.action,
+      });
+    }
+    return json as T;
+  }
+
+  async listInstitutions(country: string): Promise<Institution[]> {
+    const r = await this.call<{ institutions: Array<{ institution_id: string; name: string }> }>("/institutions/get", {
+      count: 50,
+      offset: 0,
+      country_codes: [country.toUpperCase()],
+    });
+    return r.institutions.map((i) => ({ id: i.institution_id, name: i.name, country, logoInitials: i.name.slice(0, 2).toUpperCase() }));
+  }
+
+  async getInstitution(id: string): Promise<Institution | null> {
+    try {
+      const r = await this.call<{ institution: { institution_id: string; name: string; country_codes: string[] } }>("/institutions/get_by_id", {
+        institution_id: id,
+        country_codes: ["US"],
+      });
+      return { id, name: r.institution.name, country: r.institution.country_codes[0] ?? "US", logoInitials: r.institution.name.slice(0, 2).toUpperCase() };
+    } catch {
+      return null;
+    }
+  }
+
+  async connectBank(opts: { userId: string; fullName: string; institutionId: string; country: string; redirectUri: string; state: string }): Promise<ConnectStart> {
+    const r = await this.call<{ link_token: string; hosted_link_url?: string }>("/link/token/create", {
+      user: { client_user_id: opts.userId, legal_name: opts.fullName },
+      client_name: "Sagolik Close",
+      products: ["auth", "identity"],
+      optional_products: ["transactions"],
+      country_codes: [opts.country.toUpperCase()],
+      language: "en",
+      webhook: this.cfg.webhookUrl,
+      institution_id: opts.institutionId || undefined,
+      hosted_link: { completion_redirect_uri: `${opts.redirectUri}?state=${encodeURIComponent(opts.state)}` },
+    });
+    if (!r.hosted_link_url) throw new ProviderError("plaid", "NO_HOSTED_LINK", "Bank connections are temporarily unavailable.");
+    return { redirectUrl: r.hosted_link_url, state: r.link_token };
+  }
+
+  async exchangeAuthorization(opts: { code: string; state: string }): Promise<ExchangeResult> {
+    let publicToken = opts.code;
+    if (!publicToken) {
+      const session = await this.call<{ link_sessions?: Array<{ results?: { item_add_results?: Array<{ public_token: string }> } }> }>(
+        "/link/token/get",
+        { link_token: opts.state },
+      );
+      publicToken = session.link_sessions?.[0]?.results?.item_add_results?.[0]?.public_token ?? "";
+      if (!publicToken) throw new ProviderError("plaid", "NO_PUBLIC_TOKEN", "The bank didn't confirm the connection. Please try again.");
+    }
+    const ex = await this.call<{ access_token: string; item_id: string }>("/item/public_token/exchange", { public_token: publicToken });
+    const item = await this.call<{ item: { institution_id: string | null; consent_expiration_time: string | null } }>("/item/get", {
+      access_token: ex.access_token,
+    });
+    const inst = item.item.institution_id ? await this.getInstitution(item.item.institution_id) : null;
+    return {
+      accessToken: ex.access_token,
+      externalConnectionId: ex.item_id,
+      institution: inst ?? { id: item.item.institution_id ?? "unknown", name: "Your bank", country: "US", logoInitials: "BK" },
+      consentCreatedAt: new Date().toISOString(),
+      consentExpiresAt: item.item.consent_expiration_time,
+    };
+  }
+
+  private mapAccount(a: PlaidAccount): ProviderAccount {
+    const type = a.subtype === "checking" ? "checking" : a.subtype === "savings" ? "savings" : a.type === "investment" ? "investment" : "other";
+    return { externalAccountId: a.account_id, name: a.name, mask: (a.mask ?? "").slice(-4), currency: toCurrency(a.balances.iso_currency_code), type };
+  }
+
+  async listAccounts(accessToken: string): Promise<ProviderAccount[]> {
+    const r = await this.call<{ accounts: PlaidAccount[] }>("/accounts/get", { access_token: accessToken });
+    return r.accounts.map((a) => this.mapAccount(a));
+  }
+
+  async getAccount(accessToken: string, externalAccountId: string) {
+    return (await this.listAccounts(accessToken)).find((a) => a.externalAccountId === externalAccountId) ?? null;
+  }
+
+  async getBalances(accessToken: string): Promise<ProviderBalance[]> {
+    const r = await this.call<{ accounts: PlaidAccount[] }>("/accounts/balance/get", { access_token: accessToken });
+    const asOf = new Date().toISOString();
+    return r.accounts.map((a) => ({
+      externalAccountId: a.account_id,
+      available: minor(a.balances.available),
+      current: minor(a.balances.current),
+      currency: toCurrency(a.balances.iso_currency_code),
+      asOf,
+    }));
+  }
+
+  async getTransactions(accessToken: string, range: { from: string; to: string }): Promise<ProviderBankTransaction[]> {
+    const r = await this.call<{
+      transactions: Array<{ transaction_id: string; account_id: string; date: string; name: string; amount: number; iso_currency_code: string | null }>;
+    }>("/transactions/get", { access_token: accessToken, start_date: range.from, end_date: range.to, options: { count: 250 } });
+    // Plaid: positive amount = money leaving the account. We use negative for outflows.
+    return r.transactions.map((t) => ({
+      id: t.transaction_id,
+      externalAccountId: t.account_id,
+      date: t.date,
+      description: t.name,
+      amount: -Math.round(t.amount * 100),
+      currency: toCurrency(t.iso_currency_code),
+    }));
+  }
+
+  async verifyAccountOwnership(accessToken: string, expectedName: string): Promise<OwnershipResult[]> {
+    const r = await this.call<{ accounts: PlaidAccount[] }>("/identity/get", { access_token: accessToken });
+    return r.accounts.map((a) => {
+      const ownerNames = (a.owners ?? []).flatMap((o) => o.names);
+      return { externalAccountId: a.account_id, ownerNames, match: ownerNames.some((n) => namesMatch(n, expectedName)) };
+    });
+  }
+
+  async refreshConnection(accessToken: string) {
+    try {
+      const r = await this.call<{ item: { error: { error_code: string } | null } }>("/item/get", { access_token: accessToken });
+      if (r.item.error?.error_code === "ITEM_LOGIN_REQUIRED") return { status: "reauthentication_required" as const };
+      return { status: "connected" as const };
+    } catch (e) {
+      if (e instanceof ProviderError && e.opts.action === "reconnect_bank") return { status: "reauthentication_required" as const };
+      throw e;
+    }
+  }
+
+  async disconnectBank(accessToken: string) {
+    await this.call("/item/remove", { access_token: accessToken });
+  }
+
+  parseWebhook(_rawBody: string, _headers: Headers): NormalizedWebhook {
+    throw new WebhookRejectedError("plaid_webhook_verification_not_implemented");
+  }
+}
