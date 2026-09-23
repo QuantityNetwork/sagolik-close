@@ -35,7 +35,7 @@ export async function contactAction(_prev: ActionState, fd: FormData): Promise<A
     if (input.website) return { message: "Thanks — we'll be in touch." }; // silently drop bots
     const rt = await getRuntime();
     const to = rt.env.CONTACT_INBOX ?? "contact-inbox@localhost";
-    await rt.providers.email.send({
+    await rt.providers.contactEmail.send({
       to,
       subject: `[${input.topic}] Enquiry from ${input.name}`,
       text: [`Name: ${input.name}`, `Email: ${input.email}`, `Organization: ${input.organization ?? "—"}`, `Topic: ${input.topic}`, `Request ID: ${meta.requestId}`, "", input.message].join("\n"),

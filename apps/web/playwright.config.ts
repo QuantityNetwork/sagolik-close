@@ -6,6 +6,8 @@ import { defineConfig, devices } from "@playwright/test";
  * demo closing forward, so reusing a server would start from a later state.
  */
 const PORT = Number(process.env.E2E_PORT ?? 3100);
+/** Point at an already-running server (e.g. a production build) instead of starting `next dev`. It must be freshly started. */
+const EXTERNAL = process.env.E2E_BASE_URL;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -16,16 +18,18 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: `http://localhost:${PORT}`,
+    baseURL: EXTERNAL ?? `http://localhost:${PORT}`,
     trace: "retain-on-failure",
     ...devices["Desktop Chrome"],
     launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {},
   },
-  webServer: {
-    command: `pnpm next dev -p ${PORT}`,
-    url: `http://localhost:${PORT}/api/health`,
-    reuseExistingServer: false,
-    timeout: 180_000,
-    env: { DEMO_MODE: "true", APP_ENV: "local", APP_URL: `http://localhost:${PORT}` },
-  },
+  webServer: EXTERNAL
+    ? undefined
+    : {
+        command: `pnpm next dev -p ${PORT}`,
+        url: `http://localhost:${PORT}/api/health`,
+        reuseExistingServer: false,
+        timeout: 180_000,
+        env: { DEMO_MODE: "true", APP_ENV: "local", APP_URL: `http://localhost:${PORT}` },
+      },
 });

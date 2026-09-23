@@ -1,3 +1,4 @@
+import { safeRedirectPath } from "@sagolik/security";
 import { DEMO_PERSONAS, DEMO_PASSWORD, getRuntime } from "@sagolik/core";
 import { Alert, Card, CardBody, Field, Input, ParticipantAvatar } from "@sagolik/ui";
 import type { Metadata } from "next";
@@ -13,7 +14,7 @@ export const metadata: Metadata = { title: "Sign in" };
 export default async function SignInPage({ searchParams }: { searchParams: Promise<{ next?: string; signed_out?: string; intent?: string; mode?: string }> }) {
   const sp = await searchParams;
   const actor = await getActor();
-  if (actor) redirect(sp.next && sp.next.startsWith("/") && !sp.next.startsWith("//") ? sp.next : "/app");
+  if (actor) redirect(safeRedirectPath(sp.next));
   const rt = await getRuntime();
   const supabase = rt.mode === "supabase";
   const oauth = (process.env.AUTH_OAUTH_PROVIDERS ?? "").split(",").map((s) => s.trim()).filter((p): p is "google" | "azure" => p === "google" || p === "azure");

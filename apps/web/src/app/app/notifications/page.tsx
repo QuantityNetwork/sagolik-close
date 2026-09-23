@@ -1,3 +1,4 @@
+import { safeRedirectPath } from "@sagolik/security";
 import { listNotifications, markNotificationRead } from "@sagolik/core";
 import { formatRelative } from "@sagolik/i18n";
 import { buttonClasses, Card, cn, EmptyState } from "@sagolik/ui";
@@ -17,7 +18,7 @@ async function openNotification(fd: FormData) {
   const id = String(fd.get("id") ?? "");
   const link = String(fd.get("link") ?? "/app");
   await markNotificationRead(ctx, id).catch(() => undefined);
-  redirect(link.startsWith("/") && !link.startsWith("//") ? link : "/app");
+  redirect(safeRedirectPath(link));
 }
 
 export default async function NotificationsPage() {

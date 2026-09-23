@@ -1,3 +1,4 @@
+import { safeRedirectPath } from "@sagolik/security";
 import { DEMO_TOTP_SECRET, getRuntime } from "@sagolik/core";
 import { totpCode } from "@sagolik/auth";
 import { translator } from "@sagolik/i18n";
@@ -16,7 +17,7 @@ export default async function StepUpPage({ searchParams }: { searchParams: Promi
   await requireActor("/app/step-up");
   const rt = await getRuntime();
   const t = translator("en");
-  const next = sp.next && sp.next.startsWith("/") && !sp.next.startsWith("//") ? sp.next : "/app";
+  const next = safeRedirectPath(sp.next);
 
   return (
     <div className="container-page flex max-w-md animate-rise flex-col py-12">

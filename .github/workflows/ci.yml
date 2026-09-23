@@ -47,7 +47,22 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @sagolik/web exec playwright install --with-deps chromium
+      # Test the production build (standalone server), not `next dev`: CSP nonces only apply to real builds.
+      - name: Build
+        run: pnpm --filter @sagolik/web build
+        env:
+          NEXT_OUTPUT: standalone
+      - name: Start production server
+        run: |
+          cp -r apps/web/.next/static apps/web/.next/standalone/apps/web/.next/static
+          cp -r apps/web/public/. apps/web/.next/standalone/apps/web/public/
+          APP_ENV=staging DEMO_MODE=true SESSION_SECRET=$(openssl rand -hex 32) APP_URL=http://localhost:3000 PORT=3000 HOSTNAME=0.0.0.0 node apps/web/.next/standalone/apps/web/server.js > server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:3000/api/health && break; sleep 1; done
       - run: pnpm test:e2e
+        env:
+          E2E_BASE_URL: http://localhost:3000
+      - if: failure()
+        run: cat server.log
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

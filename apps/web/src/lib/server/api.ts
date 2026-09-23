@@ -35,7 +35,7 @@ export function api<P = Record<string, string>>(handler: Handler<P>, opts: ApiOp
       if (!actor) return errorResponse(new AppError("unauthenticated", "Please sign in to continue.", 401), requestId);
 
       // Cookie-authenticated mutations must come from our own origin (CSRF).
-      if (MUTATING.has(req.method) && !isSameOrigin(req.url, req.headers.get("origin"), req.headers.get("referer"))) {
+      if (MUTATING.has(req.method) && !isSameOrigin([req.url, (await getRuntime()).env.APP_URL], req.headers.get("origin"), req.headers.get("referer"))) {
         return errorResponse(new AppError("forbidden", "This request didn't come from Sagolik Close.", 403), requestId);
       }
 

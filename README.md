@@ -35,6 +35,18 @@ pnpm worker                                # outbox delivery + webhook retries (
 
 Demo users are created in `auth.users` with the password `demo-closing-2026`. In Supabase mode, step-up uses Supabase MFA: enroll an authenticator under Settings → Security, or use a recovery code. See [docs/deployment.md](docs/deployment.md) for production.
 
+## Deploy
+
+The public site with the live demo ships as one container. See [docs/deployment.md](docs/deployment.md) for the full guide.
+
+```bash
+docker build --target web -t sagolik-close .
+docker run -p 3000:3000 -e APP_ENV=staging -e DEMO_MODE=true -e DEMO_RESET_HOURS=6 \
+  -e APP_URL=https://close.sagolik.com -e SESSION_SECRET="$(openssl rand -hex 32)" sagolik-close
+```
+
+Run a single instance: demo state lives in memory. Real accounts and closings need Supabase and production provider adapters (path B in the guide).
+
 ## Commands
 
 | Command | What it does |
@@ -63,7 +75,7 @@ packages/
   security/       Webhook signatures, field encryption, masking, rate limits, upload checks, fraud signals
   audit/          Audit actions, domain event types
   config/         Environment parsing, feature flags
-  ui/             Design-system primitives and domain components
+  ui/             Design system: primitives, domain components and the product icon set (ProductIcon, IconTile)
   i18n/           en, sv, pl, de catalogues and formatting
 supabase/         Migrations, generated reference data, RLS, storage policies, seed, database tests
 docs/             Architecture, data model, security, threat model, integrations, deployment…

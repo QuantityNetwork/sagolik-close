@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import type { NextConfig } from "next";
 
 const workspacePackages = [
@@ -16,6 +17,9 @@ const workspacePackages = [
 
 const nextConfig: NextConfig = {
   transpilePackages: workspacePackages,
+  // Container builds (Dockerfile) ship the self-contained server; Vercel ignores this.
+  output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
+  outputFileTracingRoot: resolve(process.cwd(), "../.."),
   poweredByHeader: false,
   reactStrictMode: true,
   experimental: {

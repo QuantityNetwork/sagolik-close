@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { connection } from "next/server";
 import { display, sans } from "./fonts";
 import "./globals.css";
 
@@ -26,7 +27,10 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // The CSP uses a per-request nonce (src/proxy.ts); Next.js can only apply it to
+  // dynamically rendered pages, so no HTML page may be prerendered at build time.
+  await connection();
   return (
     <html lang="en" className={`${display.variable} ${sans.variable}`}>
       <body>

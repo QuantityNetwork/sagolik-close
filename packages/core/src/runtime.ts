@@ -11,6 +11,7 @@ import { type Env, type FlagOverride, getEnv, LOCAL_ENCRYPTION_KEYS } from "@sag
 import { createMemoryDb, createSupabaseDb, type Db } from "@sagolik/database";
 import {
   createProviders,
+  dropSingletonIf,
   globalSingleton,
   MOCK_SIGNATURE_HEADER,
   type Providers,
@@ -35,6 +36,7 @@ export interface Runtime {
   storage: DocumentStorage;
   serviceClient: SupabaseClient | null;
   log: Logger;
+  startedAt: number;
 }
 
 async function init(): Promise<Runtime> {
@@ -64,7 +66,7 @@ async function init(): Promise<Runtime> {
     log.info("runtime: LOCAL demo mode (in-memory store, sandbox providers, fictional data)");
   }
 
-  const runtime: Runtime = { env, mode, providers, keyRing, serviceDb, storage, serviceClient, log };
+  const runtime: Runtime = { env, mode, providers, keyRing, serviceDb, storage, serviceClient, log, startedAt: Date.now() };
 
   // Sandbox providers deliver signed webhooks through the same pipeline real providers use.
   setMockWebhookSink(async (providerId, rawBody, signature) => {
@@ -76,8 +78,18 @@ async function init(): Promise<Runtime> {
   return runtime;
 }
 
-export function getRuntime(): Promise<Runtime> {
-  return globalSingleton("runtime", () => init());
+export async function getRuntime(): Promise<Runtime> {
+  const pending = globalSingleton("runtime", () => init());
+  const rt = await pending;
+  const hours = rt.env.DEMO_RESET_HOURS;
+  if (rt.mode === "memory" && hours > 0 && Date.now() - rt.startedAt > hours * 3_600_000) {
+    // Public demo: start the fictional environment over so every visitor sees the intended journey.
+    dropSingletonIf("runtime", pending);
+    const fresh = await globalSingleton("runtime", () => init());
+    fresh.log.info("runtime: demo environment reset", { afterHours: hours });
+    return fresh;
+  }
+  return rt;
 }
 
 /** Restore sandbox provider state from persisted records so seeded/demo flows keep working across restarts. */

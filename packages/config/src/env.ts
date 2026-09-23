@@ -55,6 +55,8 @@ const EnvSchema = z.object({
 
   /** Shared secret used by the built-in mock providers to sign their webhooks. */
   MOCK_WEBHOOK_SECRET: z.string().default("mock_webhook_secret_local_only"),
+  /** Public demo deployments: rebuild the in-memory demo every N hours so visitors start fresh (0 = never). */
+  DEMO_RESET_HOURS: z.coerce.number().min(0).default(0),
   /** Explicitly allow demo mode (seeded fictional data, persona sign-in). Never true in production. */
   DEMO_MODE: z
     .enum(["true", "false"])
@@ -80,6 +82,10 @@ export function parseEnv(source: Record<string, string | undefined> = process.en
   const supabaseConfigured = !!(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   const demoMode = env.DEMO_MODE || !supabaseConfigured;
 
+  // Any deployed environment signs sessions with its own secret — the local fallback is public.
+  if (env.APP_ENV !== "local" && (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32)) {
+    throw new EnvError(`SESSION_SECRET (≥32 chars) is required when APP_ENV=${env.APP_ENV}.`);
+  }
   if (env.APP_ENV === "production") {
     if (demoMode) throw new EnvError("Demo mode cannot run in production. Configure Supabase and unset DEMO_MODE.");
     if (!env.SUPABASE_SERVICE_ROLE_KEY) throw new EnvError("SUPABASE_SERVICE_ROLE_KEY is required in production.");

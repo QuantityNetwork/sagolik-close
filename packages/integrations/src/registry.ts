@@ -36,6 +36,8 @@ export interface Providers {
   title: TitleProvider;
   insurance: InsuranceProvider;
   email: EmailProvider;
+  /** Delivers contact-form enquiries to the Sagolik team (real email whenever configured, even in demo mode). */
+  contactEmail: EmailProvider;
   sms: SmsProvider;
   /** Every provider that can receive webhooks, keyed by provider id (the URL segment). */
   webhookReceivers: Map<string, WebhookCapable>;
@@ -72,9 +74,13 @@ export function createProviders(env: Env): Providers {
   const payments = (mocks.payments = new MockPaymentProvider(secret));
   const escrow = (mocks.escrow = new MockEscrowProvider(secret));
 
-  const email: EmailProvider = env.RESEND_API_KEY ? new ResendEmailProvider(env.RESEND_API_KEY, env.EMAIL_FROM) : new OutboxEmailProvider();
+  // Demo data belongs to fictional people: in demo mode transaction email/SMS never leave the outbox.
+  // The contact form is the one exception — it reaches the real team whenever Resend is configured.
+  const resend = env.RESEND_API_KEY ? new ResendEmailProvider(env.RESEND_API_KEY, env.EMAIL_FROM) : null;
+  const email: EmailProvider = resend && !env.demoMode ? resend : new OutboxEmailProvider();
+  const contactEmail: EmailProvider = resend ?? email;
   const sms: SmsProvider =
-    env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER
+    !env.demoMode && env.TWILIO_ACCOUNT_SID && env.TWILIO_AUTH_TOKEN && env.TWILIO_FROM_NUMBER
       ? new TwilioSmsProvider({ accountSid: env.TWILIO_ACCOUNT_SID, authToken: env.TWILIO_AUTH_TOKEN, from: env.TWILIO_FROM_NUMBER })
       : new OutboxSmsProvider();
 
@@ -104,6 +110,7 @@ export function createProviders(env: Env): Providers {
     title: new ManualTitleProvider(),
     insurance: new ManualInsuranceProvider(),
     email,
+    contactEmail,
     sms,
     webhookReceivers,
     mocks,

@@ -6,6 +6,7 @@ import {
   decryptField,
   encryptField,
   isSameOrigin,
+  safeRedirectPath,
   maskAccount,
   MemoryRateLimitStore,
   MockVirusScanner,
@@ -141,5 +142,10 @@ describe("CSRF origin check", () => {
     expect(isSameOrigin("https://close.sagolik.com/api/v1/x", "https://close.sagolik.com", null)).toBe(true);
     expect(isSameOrigin("https://close.sagolik.com/api/v1/x", "https://evil.example", null)).toBe(false);
     expect(isSameOrigin("https://close.sagolik.com/api/v1/x", null, null)).toBe(false);
+    for (const bad of ["//evil.example", "/\\evil.example", "https://evil.example", "/ok\\..", "/a\u0000b", "", null]) expect(safeRedirectPath(bad, "/app")).toBe("/app");
+    expect(safeRedirectPath("/app/transactions/1?x=2#y")).toBe("/app/transactions/1?x=2#y");
+    // Behind a proxy the request URL is internal; the configured public origin is what the browser sends.
+    expect(isSameOrigin(["http://0.0.0.0:3000/api/v1/x", "https://close.sagolik.com"], "https://close.sagolik.com", null)).toBe(true);
+    expect(isSameOrigin(["http://0.0.0.0:3000/api/v1/x", "https://close.sagolik.com"], "https://evil.example", null)).toBe(false);
   });
 });

@@ -29,3 +29,14 @@ test("security headers are set", async ({ request }) => {
   expect(h["x-content-type-options"]).toBe("nosniff");
   expect(h["referrer-policy"]).toBeTruthy();
 });
+
+test("pages run their scripts under the nonce-based CSP", async ({ page }) => {
+  const violations: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error" && /Content Security Policy/i.test(m.text())) violations.push(m.text());
+  });
+  for (const path of ["/", "/contact", "/legal/privacy", "/sign-in"]) {
+    await page.goto(path, { waitUntil: "networkidle" });
+  }
+  expect(violations).toEqual([]);
+});

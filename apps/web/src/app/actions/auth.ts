@@ -1,6 +1,6 @@
 "use server";
 import { DEMO_PERSONAS, DEMO_TOTP_SECRET, ensureProfile, getRuntime, recordSignIn, recordSignOut, systemContext, verifyStepUpCode } from "@sagolik/core";
-import { RATE_LIMITS } from "@sagolik/security";
+import { RATE_LIMITS, safeRedirectPath } from "@sagolik/security";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -9,10 +9,7 @@ import { formString, runAction } from "@/lib/server/action";
 import { contextFor, rateLimit } from "@/lib/server/context";
 import { DEMO_COOKIE, STEP_UP_COOKIE, buildActor, encodeSession, getActor, markStepUp, newDemoSession, requestMeta, sessionCookieOptions, supabaseForRequest } from "@/lib/server/session";
 
-function safeNext(next: string | undefined, fallback: string) {
-  // Only same-site relative paths — prevents open redirects.
-  return next && next.startsWith("/") && !next.startsWith("//") && !next.startsWith("/\\") ? next : fallback;
-}
+const safeNext = safeRedirectPath;
 
 async function throttle(bucket: string) {
   const meta = await requestMeta();
