@@ -87,6 +87,7 @@ docs/             Architecture, data model, security, threat model, integrations
 - [Data model](docs/data-model.md)
 - [Security](docs/security.md) and [threat model](docs/threat-model.md)
 - [Integrations](docs/integrations.md) and [provider adapters](docs/provider-adapters.md)
+- [Money service (Go) — design](docs/money-service.md)
 - [Compliance boundaries](docs/compliance-boundaries.md)
 - [Deployment](docs/deployment.md)
 
