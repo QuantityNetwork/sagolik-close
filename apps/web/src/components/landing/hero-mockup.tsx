@@ -2,20 +2,20 @@
  * Static product illustration for the landing page, rendered in HTML so it
  * stays crisp and accessible. It depicts the fictional demo transaction.
  */
-import { ParticipantAvatar, ProgressStepper } from "@sagolik/ui";
-import { Building2, CheckCircle2, Circle, FileText, Fingerprint, Home, Landmark, LayoutDashboard, ListChecks, MessageSquare, PenLine, Settings, ShieldCheck } from "lucide-react";
+import { ParticipantAvatar, ProductIcon, type ProductIconName, ProgressStepper } from "@sagolik/ui";
+import { CheckCircle2, Circle } from "lucide-react";
 import Image from "next/image";
 import { Mark } from "../brand";
 
-const SIDEBAR = [
-  { icon: LayoutDashboard, label: "Dashboard", active: true },
-  { icon: Building2, label: "Transactions" },
-  { icon: FileText, label: "Documents" },
-  { icon: PenLine, label: "Signatures" },
-  { icon: Fingerprint, label: "Identity" },
-  { icon: MessageSquare, label: "Messages" },
-  { icon: ListChecks, label: "Tasks" },
-  { icon: Settings, label: "Settings" },
+const SIDEBAR: Array<{ icon: ProductIconName; label: string; active?: boolean }> = [
+  { icon: "dashboard", label: "Dashboard", active: true },
+  { icon: "transactions", label: "Transactions" },
+  { icon: "documents", label: "Documents" },
+  { icon: "signatures", label: "Signatures" },
+  { icon: "identity", label: "Identity" },
+  { icon: "messages", label: "Messages" },
+  { icon: "tasks", label: "Tasks" },
+  { icon: "settings", label: "Settings" },
 ];
 
 const STAGES = ["Started", "Docs", "Identity", "Finance", "Signing", "Escrow", "Transfer", "Closed"];
@@ -30,9 +30,9 @@ export function HeroMockup() {
             <span className="font-display text-[15px] text-white">Sagolik Close</span>
           </div>
           <ul className="space-y-0.5 text-[11.5px]">
-            {SIDEBAR.map(({ icon: Icon, label, active }) => (
+            {SIDEBAR.map(({ icon, label, active }) => (
               <li key={label} className={`flex items-center gap-2 rounded-md px-2 py-1.5 ${active ? "bg-white/10 text-white" : ""}`}>
-                <Icon className="h-3.5 w-3.5" aria-hidden />
+                <ProductIcon name={icon} tone="light" size={14} className={active ? "" : "opacity-75"} />
                 {label}
               </li>
             ))}
@@ -91,7 +91,7 @@ export function HeroMockup() {
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <div className="rounded-lg border border-line p-3">
               <p className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
-                <Landmark className="h-3.5 w-3.5 text-teal-600" aria-hidden /> Escrow
+                <ProductIcon name="escrow" size={14} /> Escrow
               </p>
               <p className="mt-1 text-[11px] text-ink-3">Instructions verified · Deposit received</p>
               <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-success">
@@ -100,7 +100,7 @@ export function HeroMockup() {
             </div>
             <div className="rounded-lg border border-line p-3">
               <p className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
-                <ShieldCheck className="h-3.5 w-3.5 text-teal-600" aria-hidden /> Identity
+                <ProductIcon name="identity" size={14} /> Identity
               </p>
               <p className="mt-1 text-[11px] text-ink-3">Buyer and seller</p>
               <p className="mt-2 inline-flex items-center gap-1 text-[11px] font-medium text-success">
@@ -109,7 +109,7 @@ export function HeroMockup() {
             </div>
             <div className="rounded-lg border border-line p-3">
               <p className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
-                <Home className="h-3.5 w-3.5 text-teal-600" aria-hidden /> Ownership
+                <ProductIcon name="ownership" size={14} /> Ownership
               </p>
               <p className="mt-1 text-[11px] text-ink-3">Recorded after registry confirmation</p>
             </div>

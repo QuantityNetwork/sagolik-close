@@ -1,30 +1,5 @@
-import { buttonClasses, formatMoney, ProgressStepper } from "@sagolik/ui";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Banknote,
-  Bell,
-  Building2,
-  CalendarClock,
-  Check,
-  FileLock2,
-  FileSignature,
-  Fingerprint,
-  FolderLock,
-  Home,
-  KeyRound,
-  Landmark,
-  LayoutDashboard,
-  Lock,
-  PenLine,
-  Scale,
-  ScrollText,
-  ShieldCheck,
-  Sparkles,
-  UserRound,
-  Users,
-  Workflow,
-} from "lucide-react";
+import { buttonClasses, formatMoney, IconTile, ProductIcon, type ProductIconName, ProgressStepper } from "@sagolik/ui";
+import { ArrowRight, BadgeCheck, Check, Sparkles } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -73,16 +48,13 @@ export function Hero() {
           </div>
           <ul className="mt-10 grid max-w-lg grid-cols-3 gap-4 text-[12px]">
             {[
-              [Lock, "Secure", "by design"],
-              [Workflow, "Structured", "workflows"],
-              [Landmark, "Partner", "ready"],
-            ].map(([Icon, a, b]) => {
-              const I = Icon as typeof Lock;
+              ["escrow", "Secure", "by design"],
+              ["timeline", "Structured", "workflows"],
+              ["banking", "Partner", "ready"],
+            ].map(([icon, a, b]) => {
               return (
                 <li key={a as string} className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full border border-line bg-paper text-teal-700">
-                    <I className="h-4 w-4" aria-hidden />
-                  </span>
+                  <IconTile name={icon as ProductIconName} size="sm" className="h-9 w-9 rounded-lg" />
                   <span className="leading-tight">
                     <span className="block font-semibold text-ink">{a as string}</span>
                     <span className="text-[10.5px] uppercase tracking-[0.12em] text-ink-3">{b as string}</span>
@@ -104,18 +76,18 @@ export function Hero() {
 
 export function TrustRail() {
   const items = [
-    [Fingerprint, "Secure Identity", "KYC & fraud protection"],
-    [PenLine, "Digital Signatures", "eSign compliant"],
-    [Landmark, "Escrow Coordination", "Real-time visibility"],
-    [FolderLock, "Document Vault", "Encrypted & versioned"],
-    [ShieldCheck, "Audit Trails", "Complete transparency"],
-  ] as const;
+    ["identity", "Secure Identity", "KYC & fraud protection"],
+    ["signatures", "Digital Signatures", "eSign compliant"],
+    ["escrow", "Escrow Coordination", "Real-time visibility"],
+    ["documents", "Document Vault", "Encrypted & versioned"],
+    ["title", "Audit Trails", "Complete transparency"],
+  ] as const satisfies ReadonlyArray<readonly [ProductIconName, string, string]>;
   return (
     <section aria-label="Platform foundations" className="border-y border-line bg-paper">
       <ul className="container-page grid grid-cols-2 gap-y-6 py-7 sm:grid-cols-3 lg:grid-cols-5">
-        {items.map(([Icon, title, sub]) => (
+        {items.map(([icon, title, sub]) => (
           <li key={title} className="flex items-center gap-3 lg:justify-center">
-            <Icon className="h-6 w-6 shrink-0 text-navy-800" strokeWidth={1.5} aria-hidden />
+            <ProductIcon name={icon} size={28} />
             <span className="leading-tight">
               <span className="block text-[13.5px] font-semibold text-ink">{title}</span>
               <span className="text-[10.5px] uppercase tracking-[0.12em] text-ink-3">{sub}</span>
@@ -131,21 +103,21 @@ export function TrustRail() {
 
 export function HowItWorks() {
   const steps = [
-    [Building2, "Start the file", "Open a transaction, invite every party and set up your closing details in minutes."],
-    [UserRound, "Verify & collect", "Verify identities securely and collect documents from every party in one place."],
-    [FileSignature, "Coordinate & sign", "Keep everyone aligned, review documents and sign electronically with confidence."],
-    [Home, "Close & transfer ownership", "Confirm funding, record the deed and complete the handoff — from decision to ownership."],
-  ] as const;
+    ["transactions", "Start the file", "Open a transaction, invite every party and set up your closing details in minutes."],
+    ["identity", "Verify & collect", "Verify identities securely and collect documents from every party in one place."],
+    ["signatures", "Coordinate & sign", "Keep everyone aligned, review documents and sign electronically with confidence."],
+    ["ownership", "Close & transfer ownership", "Confirm funding, record the deed and complete the handoff — from decision to ownership."],
+  ] as const satisfies ReadonlyArray<readonly [ProductIconName, string, string]>;
   return (
     <section id="how-it-works" className="scroll-mt-24 py-20" aria-labelledby="how-title">
       <div className="container-page">
         <SectionHeading eyebrow="A clearer path for everyone" title="How Sagolik Close Works" align="center" id="how-title" />
         <ol className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {steps.map(([Icon, title, body], i) => (
+          {steps.map(([icon, title, body], i) => (
             <li key={title} className="relative rounded-xl border border-line bg-paper p-6">
-              <div className="flex items-center gap-4">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full border border-line-strong font-display text-lg text-navy-800">{i + 1}</span>
-                <Icon className="h-6 w-6 text-teal-600" strokeWidth={1.5} aria-hidden />
+              <div className="flex items-center justify-between gap-4">
+                <IconTile name={icon} size="md" />
+                <span className="font-display text-[34px] leading-none text-navy-100">{String(i + 1).padStart(2, "0")}</span>
               </div>
               <h3 className="mt-5 font-sans text-[15px] font-semibold text-ink">{title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-ink-3">{body}</p>
@@ -161,34 +133,42 @@ export function HowItWorks() {
 
 export function Modules() {
   const modules = [
-    [LayoutDashboard, "Closing Dashboard", "End-to-end visibility across every transaction, deadline and party."],
-    [FolderLock, "Document Vault", "Encrypted storage, immutable versions, hashes and access control per document."],
-    [ShieldCheck, "Identity & Compliance", "KYC, sanctions and source-of-funds checks — always with a human reviewer."],
-    [Landmark, "Escrow Coordination", "Verified instructions, deposits and conditions with your licensed escrow partner."],
-    [Bell, "Smart Notifications", "The right person, the right moment, the right channel — never sensitive data by SMS."],
-    [CalendarClock, "Ownership Timeline", "A clear, trackable record from contract to recording — and beyond."],
-  ] as const;
+    ["overview", "Overview", "Your closing"],
+    ["documents", "Documents", "Upload & sign"],
+    ["banking", "Banking", "Connect accounts"],
+    ["payments", "Payments", "Track & transfer"],
+    ["escrow", "Escrow", "Secure funds"],
+    ["ownership", "Ownership", "Finalize & record"],
+    ["people", "People", "Buyers, sellers & pros"],
+    ["tasks", "Tasks", "Stay on track"],
+    ["timeline", "Timeline", "See the journey"],
+    ["property", "Property", "Details & data"],
+    ["signatures", "Signatures", "E-sign securely"],
+    ["identity", "Identity", "Verify & comply"],
+    ["financing", "Financing", "Mortgage & loans"],
+    ["title", "Title", "Clear to close"],
+    ["insurance", "Insurance", "Cover what matters"],
+    ["messages", "Messages", "Secure communication"],
+    ["integrations", "Integrations", "Banks, APIs & partners"],
+    ["settings", "Settings", "Your preferences"],
+  ] as const satisfies ReadonlyArray<readonly [ProductIconName, string, string]>;
   return (
-    <section id="platform" className="scroll-mt-24 border-t border-line bg-paper py-20" aria-labelledby="platform-title">
+    <section id="platform" className="scroll-mt-24 border-t border-line bg-gradient-to-b from-paper to-[#eef2f6] py-20" aria-labelledby="platform-title">
       <div className="container-page">
         <div className="flex flex-wrap items-end justify-between gap-6">
-          <SectionHeading title="Built for Modern Closings" id="platform-title">
-            Everything you need for a faster, more secure and more transparent closing.
+          <SectionHeading eyebrow="Built for modern closings" title="A complete closing journey. In one place." id="platform-title">
+            Every part of the closing has its own place — with the right people, documents and status — so nothing lives in scattered emails.
           </SectionHeading>
           <Link href="#security" className="inline-flex items-center gap-1.5 text-sm font-medium text-teal-700 hover:text-teal-800">
             How we keep it secure <ArrowRight className="h-4 w-4" aria-hidden />
           </Link>
         </div>
-        <ul className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {modules.map(([Icon, title, body]) => (
-            <li key={title} className="flex gap-4 rounded-xl border border-line bg-canvas/40 p-6">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-navy-50 text-navy-800">
-                <Icon className="h-5 w-5" strokeWidth={1.6} aria-hidden />
-              </span>
-              <div>
-                <h3 className="font-sans text-[15px] font-semibold text-ink">{title}</h3>
-                <p className="mt-1.5 text-sm leading-relaxed text-ink-3">{body}</p>
-              </div>
+        <ul className="mt-12 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-6">
+          {modules.map(([icon, title, caption]) => (
+            <li key={title} className="flex flex-col items-center text-center">
+              <IconTile name={icon} size="lg" />
+              <h3 className="mt-3 font-sans text-[15px] font-semibold text-navy-800">{title}</h3>
+              <p className="mt-0.5 text-[10.5px] uppercase tracking-[0.14em] text-ink-3">{caption}</p>
             </li>
           ))}
         </ul>
@@ -316,15 +296,14 @@ export function SellerExperience() {
         </div>
         <ul className="grid gap-4 sm:grid-cols-2 lg:col-span-2">
           {[
-            [FileSignature, "Sign the deed securely", "Sign closing documents electronically, with a step-up check for the documents that transfer your property."],
-            [Banknote, "Know when proceeds release", "See payoff, conditions and disbursement status from your escrow partner — not guesses."],
-            [ScrollText, "One place for every disclosure", "Upload disclosures once. Every professional sees the current version, and every version is kept."],
-            [BadgeCheck, "Protected payout details", "Payout instructions are versioned, verified by a second person and guarded by a waiting period after any change."],
-          ].map(([Icon, t, b]) => {
-            const I = Icon as typeof Home;
+            ["signatures", "Sign the deed securely", "Sign closing documents electronically, with a step-up check for the documents that transfer your property."],
+            ["payments", "Know when proceeds release", "See payoff, conditions and disbursement status from your escrow partner — not guesses."],
+            ["documents", "One place for every disclosure", "Upload disclosures once. Every professional sees the current version, and every version is kept."],
+            ["escrow", "Protected payout details", "Payout instructions are versioned, verified by a second person and guarded by a waiting period after any change."],
+          ].map(([icon, t, b]) => {
             return (
               <li key={t as string} className="rounded-xl border border-line bg-paper p-6">
-                <I className="h-5 w-5 text-teal-600" strokeWidth={1.6} aria-hidden />
+                <IconTile name={icon as ProductIconName} size="sm" />
                 <h3 className="mt-3 font-sans text-[15px] font-semibold text-ink">{t as string}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-ink-3">{b as string}</p>
               </li>
@@ -429,13 +408,13 @@ export function Banking() {
 
 export function Security() {
   const controls = [
-    [KeyRound, "Step-up authentication", "Moving money, changing payment details and signing closing documents require a fresh second factor."],
-    [Users, "Dual control", "A second authorized person approves transfers and verifies payment instructions — never the person who entered them."],
-    [CalendarClock, "Cooling-off on changes", "Changed payout details enter a waiting period, and every party is alerted to verify by phone."],
-    [FileLock2, "Encryption & least privilege", "Tokens and account numbers are encrypted at rest; row-level security isolates every transaction and organization."],
-    [ScrollText, "Append-only audit trail", "Who did what, when and from where — enforced in the database, exportable for auditors."],
-    [Scale, "Humans decide compliance", "Automated checks flag; qualified people decide. AI never approves KYC, AML or funds."],
-  ] as const;
+    ["identity", "Step-up authentication", "Moving money, changing payment details and signing closing documents require a fresh second factor."],
+    ["people", "Dual control", "A second authorized person approves transfers and verifies payment instructions — never the person who entered them."],
+    ["timeline", "Cooling-off on changes", "Changed payout details enter a waiting period, and every party is alerted to verify by phone."],
+    ["escrow", "Encryption & least privilege", "Tokens and account numbers are encrypted at rest; row-level security isolates every transaction and organization."],
+    ["title", "Append-only audit trail", "Who did what, when and from where — enforced in the database, exportable for auditors."],
+    ["tasks", "Humans decide compliance", "Automated checks flag; qualified people decide. AI never approves KYC, AML or funds."],
+  ] as const satisfies ReadonlyArray<readonly [ProductIconName, string, string]>;
   return (
     <section id="security" className="scroll-mt-24 bg-navy-900 py-20 text-white" aria-labelledby="security-title">
       <div className="container-page">
@@ -449,9 +428,11 @@ export function Security() {
           </p>
         </div>
         <ul className="mt-12 grid gap-px overflow-hidden rounded-xl bg-white/10 md:grid-cols-2 lg:grid-cols-3">
-          {controls.map(([Icon, t, b]) => (
+          {controls.map(([icon, t, b]) => (
             <li key={t} className="bg-navy-900 p-6">
-              <Icon className="h-5 w-5 text-teal-300" strokeWidth={1.6} aria-hidden />
+              <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-white/8 ring-1 ring-white/10">
+                <ProductIcon name={icon} tone="light" size={24} />
+              </span>
               <h3 className="mt-3 font-sans text-[15px] font-semibold">{t}</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-white/70">{b}</p>
             </li>
@@ -467,19 +448,19 @@ export function Security() {
 export function EscrowSignaturesVault() {
   const blocks = [
     {
-      icon: Landmark,
+      icon: "escrow" as const,
       eyebrow: "Escrow",
       title: "Orchestration, not custody",
       body: "Your licensed escrow or title partner holds the funds. Sagolik Close shows the required amount, what's received, what's outstanding, the conditions and the expected release — and records settlement only when the provider confirms it.",
     },
     {
-      icon: PenLine,
+      icon: "signatures" as const,
       eyebrow: "Electronic signatures",
       title: "Sign once, keep forever",
       body: "Signature requests go to the right people in the right order. The signed copy and the provider's completion certificate are stored as a new, immutable version — the original is never overwritten.",
     },
     {
-      icon: FolderLock,
+      icon: "documents" as const,
       eyebrow: "Document vault",
       title: "Every version, every hash",
       body: "Uploads are scanned, type-checked and hashed before storage. Access follows each document's classification, every view is audited, and extracted details stay suggestions until a person confirms them.",
@@ -488,9 +469,9 @@ export function EscrowSignaturesVault() {
   return (
     <section className="py-20" aria-label="Escrow, signatures and documents">
       <div className="container-page grid gap-6 lg:grid-cols-3">
-        {blocks.map(({ icon: Icon, eyebrow, title, body }) => (
+        {blocks.map(({ icon, eyebrow, title, body }) => (
           <article key={eyebrow} className="rounded-xl border border-line bg-paper p-7">
-            <Icon className="h-6 w-6 text-teal-600" strokeWidth={1.5} aria-hidden />
+            <IconTile name={icon} size="md" />
             <p className="eyebrow mt-5">{eyebrow}</p>
             <h3 className="mt-2 text-[26px] leading-tight text-navy-800">{title}</h3>
             <p className="mt-3 text-sm leading-relaxed text-ink-2">{body}</p>
@@ -563,11 +544,11 @@ export function BrighterTomorrow() {
 
 export function Parties() {
   const parties = [
-    [Home, "Buyers", "A simpler, clearer path to homeownership."],
-    [UserRound, "Agents", "Keep clients informed and deals on track."],
-    [Landmark, "Lenders", "Faster documentation and smoother coordination."],
-    [ScrollText, "Title & Escrow", "Structured workflows and verified instructions."],
-  ] as const;
+    ["overview", "Buyers", "A simpler, clearer path to homeownership."],
+    ["people", "Agents", "Keep clients informed and deals on track."],
+    ["financing", "Lenders", "Faster documentation and smoother coordination."],
+    ["title", "Title & Escrow", "Structured workflows and verified instructions."],
+  ] as const satisfies ReadonlyArray<readonly [ProductIconName, string, string]>;
   return (
     <section className="py-20" aria-labelledby="parties-title">
       <div className="container-page">
@@ -575,9 +556,9 @@ export function Parties() {
           Different roles. A better closing experience for all — with each party seeing exactly what they should.
         </SectionHeading>
         <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {parties.map(([Icon, t, b]) => (
+          {parties.map(([icon, t, b]) => (
             <li key={t} className="rounded-xl border border-line bg-paper p-6">
-              <Icon className="h-6 w-6 text-navy-800" strokeWidth={1.5} aria-hidden />
+              <IconTile name={icon} size="md" />
               <h3 className="mt-4 font-sans text-[15px] font-semibold text-ink">{t}</h3>
               <p className="mt-1.5 text-sm text-ink-3">{b}</p>
             </li>
@@ -605,13 +586,13 @@ export function Parties() {
 
 export function Integrations() {
   const groups = [
-    ["Open banking", "Plaid, TrueLayer, Tink, GoCardless, Yapily"],
-    ["Identity & KYC", "Persona, Veriff, Stripe Identity, Onfido, Signicat, BankID"],
-    ["E-signatures", "DocuSign, Dropbox Sign, Adobe Acrobat Sign, SignNow"],
-    ["Escrow & payments", "Licensed escrow and title partners, bank rails (ACH, wire, SEPA)"],
-    ["Property & title", "Property-data providers, title plants, national land registries"],
-    ["Messaging", "Email and SMS providers, calendar (Google, Microsoft, ICS)"],
-  ];
+    ["banking", "Open banking", "Plaid, TrueLayer, Tink, GoCardless, Yapily"],
+    ["identity", "Identity & KYC", "Persona, Veriff, Stripe Identity, Onfido, Signicat, BankID"],
+    ["signatures", "E-signatures", "DocuSign, Dropbox Sign, Adobe Acrobat Sign, SignNow"],
+    ["payments", "Escrow & payments", "Licensed escrow and title partners, bank rails (ACH, wire, SEPA)"],
+    ["property", "Property & title", "Property-data providers, title plants, national land registries"],
+    ["messages", "Messaging", "Email and SMS providers, calendar (Google, Microsoft, ICS)"],
+  ] as const satisfies ReadonlyArray<readonly [ProductIconName, string, string]>;
   return (
     <section id="resources" className="scroll-mt-24 border-t border-line bg-paper py-20" aria-labelledby="integrations-title">
       <div className="container-page grid gap-12 lg:grid-cols-[1fr_1.4fr]">
@@ -622,10 +603,13 @@ export function Integrations() {
           <p className="mt-4 text-[12px] text-ink-3">Names are examples of compatible provider categories, not announced partnerships. Availability varies by market.</p>
         </div>
         <ul className="grid gap-3 sm:grid-cols-2">
-          {groups.map(([t, b]) => (
-            <li key={t} className="rounded-lg border border-line p-4">
-              <p className="text-sm font-semibold text-ink">{t}</p>
-              <p className="mt-1 text-[13px] text-ink-3">{b}</p>
+          {groups.map(([icon, t, b]) => (
+            <li key={t} className="flex gap-3.5 rounded-lg border border-line p-4">
+              <IconTile name={icon} size="sm" />
+              <div>
+                <p className="text-sm font-semibold text-ink">{t}</p>
+                <p className="mt-1 text-[13px] text-ink-3">{b}</p>
+              </div>
             </li>
           ))}
         </ul>

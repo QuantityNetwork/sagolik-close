@@ -1,3 +1,4 @@
+import { ProductIcon, type ProductIconName } from "@sagolik/ui";
 import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -8,26 +9,27 @@ export const metadata: Metadata = { title: "More" };
 
 export default async function MorePage() {
   const actor = await requireActor("/app/more");
-  const links = [
-    ["Transactions", "/app/transactions"],
-    ...(actor.memberships.length ? [["Command center", "/app/command-center"]] : []),
-    ["Home Record", "/app/ownership"],
-    ["Notifications", "/app/notifications"],
-    ["Profile", "/app/settings"],
-    ["Security", "/app/settings/security"],
-    ["Notification settings", "/app/settings/notifications"],
-    ["Connected banks", "/app/settings/banks"],
-    ["Privacy center", "/app/settings/privacy"],
-    ...(actor.isPlatformAdmin ? [["Admin", "/admin"]] : []),
+  const links: Array<[string, string, ProductIconName]> = [
+    ["Transactions", "/app/transactions", "transactions"],
+    ...(actor.memberships.length ? [["Command center", "/app/command-center", "dashboard"] as [string, string, ProductIconName]] : []),
+    ["Home Record", "/app/ownership", "ownership"],
+    ["Notifications", "/app/notifications", "notifications"],
+    ["Profile", "/app/settings", "people"],
+    ["Security", "/app/settings/security", "identity"],
+    ["Notification settings", "/app/settings/notifications", "settings"],
+    ["Connected banks", "/app/settings/banks", "banking"],
+    ["Privacy center", "/app/settings/privacy", "escrow"],
+    ...(actor.isPlatformAdmin ? [["Admin", "/admin", "integrations"] as [string, string, ProductIconName]] : []),
   ];
   return (
     <div className="container-page max-w-xl py-6">
       <h1 className="text-[30px] text-navy-800">More</h1>
       <ul className="mt-4 divide-y divide-line rounded-[var(--radius-card)] border border-line bg-paper">
-        {links.map(([label, href]) => (
+        {links.map(([label, href, icon]) => (
           <li key={href}>
-            <Link href={href!} className="flex items-center justify-between px-4 py-3.5 text-[15px] text-ink">
-              {label}
+            <Link href={href} className="flex items-center gap-3 px-4 py-3.5 text-[15px] text-ink">
+              <ProductIcon name={icon} size={22} />
+              <span className="flex-1">{label}</span>
               <ChevronRight className="h-4 w-4 text-ink-4" aria-hidden />
             </Link>
           </li>

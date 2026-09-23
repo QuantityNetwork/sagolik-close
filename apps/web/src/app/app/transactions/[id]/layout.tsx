@@ -16,18 +16,18 @@ export default async function TransactionLayout({ children, params }: { children
   const complianceOpen = s.complianceCases.filter((c) => c.status === "review_required" || c.status === "escalated").length;
 
   const tabs = [
-    { href: base, label: "Overview", exact: true },
-    { href: `${base}/tasks`, label: "Tasks", count: openTasks },
-    { href: `${base}/documents`, label: "Documents", count: view.documents.needsAttention },
-    ...(can("financial.view") ? [{ href: `${base}/money`, label: "Money" }] : []),
-    ...(s.mortgage || can("mortgage.update") ? [{ href: `${base}/mortgage`, label: "Financing" }] : []),
-    ...(s.titleCase || can("title.update") ? [{ href: `${base}/title`, label: "Title" }] : []),
-    { href: `${base}/people`, label: "People" },
-    { href: `${base}/messages`, label: "Messages" },
-    { href: `${base}/calendar`, label: "Calendar" },
-    ...(can("compliance.review") ? [{ href: `${base}/compliance`, label: "Compliance", count: complianceOpen }] : []),
-    { href: `${base}/closing`, label: "Closing" },
-    ...(can("audit.view") ? [{ href: `${base}/audit`, label: "Audit" }] : []),
+    { href: base, label: "Overview", exact: true, icon: "overview" as const },
+    { href: `${base}/tasks`, label: "Tasks", count: openTasks, icon: "tasks" as const },
+    { href: `${base}/documents`, label: "Documents", count: view.documents.needsAttention, icon: "documents" as const },
+    ...(can("financial.view") ? [{ href: `${base}/money`, label: "Money", icon: "payments" as const }] : []),
+    ...(s.mortgage || can("mortgage.update") ? [{ href: `${base}/mortgage`, label: "Financing", icon: "financing" as const }] : []),
+    ...(s.titleCase || can("title.update") ? [{ href: `${base}/title`, label: "Title", icon: "title" as const }] : []),
+    { href: `${base}/people`, label: "People", icon: "people" as const },
+    { href: `${base}/messages`, label: "Messages", icon: "messages" as const },
+    { href: `${base}/calendar`, label: "Calendar", icon: "timeline" as const },
+    ...(can("compliance.review") ? [{ href: `${base}/compliance`, label: "Compliance", count: complianceOpen, icon: "identity" as const }] : []),
+    { href: `${base}/closing`, label: "Closing", icon: "ownership" as const },
+    ...(can("audit.view") ? [{ href: `${base}/audit`, label: "Audit", icon: "integrations" as const }] : []),
   ];
 
   return (

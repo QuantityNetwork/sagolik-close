@@ -1,9 +1,9 @@
 "use client";
-import { cn } from "@sagolik/ui";
+import { cn, ProductIcon, type ProductIconName } from "@sagolik/ui";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-export function TabNav({ tabs, label }: { tabs: Array<{ href: string; label: string; count?: number; exact?: boolean }>; label: string }) {
+export function TabNav({ tabs, label }: { tabs: Array<{ href: string; label: string; count?: number; exact?: boolean; icon?: ProductIconName }>; label: string }) {
   const pathname = usePathname();
   return (
     <nav aria-label={label} className="-mb-px overflow-x-auto">
@@ -20,6 +20,7 @@ export function TabNav({ tabs, label }: { tabs: Array<{ href: string; label: str
                   active ? "border-navy-800 font-medium text-navy-800" : "border-transparent text-ink-3 hover:text-ink",
                 )}
               >
+                {t.icon ? <ProductIcon name={t.icon} tone={active ? "brand" : "mono"} size={16} /> : null}
                 {t.label}
                 {t.count ? <span className="rounded-full bg-attention-50 px-1.5 text-[11px] font-semibold text-attention">{t.count}</span> : null}
               </Link>
