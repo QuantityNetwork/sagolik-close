@@ -145,12 +145,16 @@ The rules already exist in `packages/core/src/services/{banking,payments,escrow}
    - a TypeScript adapter (`MoneyServiceClient`) replaces the in-process calls when `MONEY_SERVICE_URL` is set
    - the lifecycle tests run against both implementations
 3. **M3 — Plaid:** Plaid Auth, Identity and Balance for account ownership and proof of funds. Tokens now live only in the money service.
-4. **M4 — First escrow partner:** integrate with the partner's title production system (e.g. Qualia, SoftPro or ResWare, depending on the partner) to verify beneficiaries and confirm receipt and disbursement (F1, F3).
+4. **M4 — First escrow partner: Fidelity National Financial (FNF).** FNF is the largest US title insurer (brands include Fidelity National Title and Chicago Title) and owns SoftPro, a title production system also widely used by independent agents. Integrate with SoftPro through its partner program, to verify beneficiaries and confirm receipt and disbursement (F1, F3). This needs a signed partnership: the APIs are partner-gated. FNF also runs its own consumer closing app (inHere), so position Sagolik Close as the multi-party layer that works *with* their systems, not a replacement for them.
 5. **M5 — Hardening:** penetration test, SOC 2 Type I readiness, runbooks, and delete the TypeScript money code.
 6. **Later, only with counsel sign-off:** F2 escrow-initiated ACH/RTP.
 
-## 10. Open decisions
+## 10. Decisions
 
-- **Cloud:** AWS is assumed, for KMS/HSM, Secrets Manager and private networking. The web app can stay on Vercel or move next to the service.
-- **First escrow or title partner:** this decides the integration target in M4.
-- **Wire-fraud verification provider:** chosen once the first partner is known.
+| Decision | Outcome |
+| --- | --- |
+| First market | United States |
+| Custody | None: orchestration only |
+| Cloud for the money service | AWS (KMS/HSM, Secrets Manager, private networking) |
+| First escrow/title partner | Fidelity National Financial, through SoftPro |
+| Wire-fraud verification provider | Open: choose alongside the FNF conversation |
