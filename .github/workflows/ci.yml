@@ -68,3 +68,36 @@ jobs:
         with:
           name: playwright-report
           path: apps/web/playwright-report
+
+  money-service:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: services/money
+    env:
+      GOTOOLCHAIN: auto
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/money/go.mod
+          cache-dependency-path: services/money/go.sum
+      - name: Formatting
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go mod verify
+      - run: go vet ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+      - name: gosec
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.29.0 -quiet ./...
+      - name: PostgreSQL server binaries
+        run: sudo apt-get update && sudo apt-get install -y postgresql
+      - name: Tests (race detector, real Postgres)
+        run: ./scripts/test-db.sh
+        env:
+          CI: "true"
+      - name: Build
+        run: CGO_ENABLED=0 go build -trimpath -o /dev/null ./cmd/money
+

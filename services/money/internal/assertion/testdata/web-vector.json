@@ -1,0 +1,16 @@
+{
+  "now": "2026-09-23T12:00:00.000Z",
+  "jwks": {
+    "keys": [
+      {
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "kid": "web-test-1",
+        "x": "A6EHv_POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg",
+        "use": "sig",
+        "alg": "EdDSA"
+      }
+    ]
+  },
+  "token": "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCIsImtpZCI6IndlYi10ZXN0LTEifQ.eyJpc3MiOiJzYWdvbGlrLXdlYiIsImF1ZCI6InNhZ29saWstbW9uZXkiLCJzdWIiOiI0YTZhNDMyNC01ZmM4LTRiYWEtYTgyOC0xNDIxMGRlNzdkM2MiLCJ0eG4iOiJhOGRiMTA5Ni0xMzM2LTQ0NjctOGZkOS02NDE1YmQ4OTM5YzAiLCJyb2xlIjoiYnV5ZXIiLCJhYWwiOiJhYWwyIiwic3RlcF91cF9hdCI6MTc5MDE2NDcxMCwiaWF0IjoxNzkwMTY0ODAwLCJleHAiOjE3OTAxNjQ4NjAsImp0aSI6InZlY3Rvci1qdGktMDAwMDAwMDAwMSJ9.z3bblHIzcktMmcwv96HcqKgXtF5EfyyhXvPMpJ4ynyfbzPC8j2gmMaF0DaLFVwiCA0DmyLnr1tYKNTWy6XiVCQ"
+}

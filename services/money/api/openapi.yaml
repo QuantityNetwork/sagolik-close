@@ -1,0 +1,88 @@
+openapi: 3.1.0
+info:
+  title: Sagolik Close money service (internal)
+  version: 0.1.0
+  description: |
+    Internal API reachable only over mutual TLS from allowed workloads
+    (e.g. spiffe://sagolik/web). Every /v1 call carries a user assertion:
+    an Ed25519 compact JWS (alg EdDSA), at most 60 seconds valid, single use.
+    Sagolik Close never holds client funds; balances mirror what the licensed
+    escrow partner reports.
+servers:
+  - url: https://money.internal:8443
+security:
+  - userAssertion: []
+paths:
+  /v1/session:
+    get:
+      summary: Verify the caller's assertion and describe the principal
+      responses:
+        "200":
+          description: Verified caller
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId, aal]
+                properties:
+                  userId: { type: string, format: uuid }
+                  aal: { type: string, enum: [aal1, aal2] }
+                  transactionId: { type: string, format: uuid }
+                  role: { type: string }
+                  stepUpAgeSeconds: { type: integer, minimum: 0 }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+  /v1/transactions/{id}/funds:
+    get:
+      summary: Funds summary for a transaction (audited)
+      description: The assertion must be scoped to this transaction and carry a role allowed to view money.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Balances per currency, in cents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transactionId, balances]
+                properties:
+                  transactionId: { type: string, format: uuid }
+                  balances:
+                    type: array
+                    items: { $ref: "#/components/schemas/Balance" }
+        "401": { $ref: "#/components/responses/Unauthenticated" }
+        "404": { $ref: "#/components/responses/NotFound" }
+components:
+  securitySchemes:
+    userAssertion:
+      type: http
+      scheme: bearer
+      bearerFormat: JWS (EdDSA, 60s, single use)
+  schemas:
+    Balance:
+      type: object
+      required: [currency, expected, outstanding, received, disbursed]
+      properties:
+        currency: { type: string, pattern: "^[A-Z]{3}$" }
+        expected: { type: integer, description: Total the buyer has been asked to send to escrow }
+        outstanding: { type: integer, description: Still due; negative means more than expected was received }
+        received: { type: integer, description: Currently held by escrow, as reported }
+        disbursed: { type: integer }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, requestId]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            requestId: { type: string }
+  responses:
+    Unauthenticated:
+      description: Missing, invalid, expired or replayed assertion
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Unknown transaction or no access (indistinguishable by design)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

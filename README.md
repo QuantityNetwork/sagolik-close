@@ -65,6 +65,8 @@ Run a single instance: demo state lives in memory. Real accounts and closings ne
 apps/
   web/            Next.js app: landing, auth, workspace, command center, admin, API v1, webhooks
   worker/         Outbox delivery and webhook retry loop
+services/
+  money/          Go money service (isolated): mTLS, signed user assertions, envelope encryption, append-only ledger + audit chain
 packages/
   types/          Zod schemas for every entity, enum and API input
   auth/           Roles → permissions, authorization, step-up, TOTP

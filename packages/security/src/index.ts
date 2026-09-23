@@ -5,3 +5,4 @@ export * from "./rate-limit";
 export * from "./uploads";
 export * from "./fraud";
 export * from "./headers";
+export * from "./assertion";

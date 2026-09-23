@@ -1,6 +1,6 @@
 # Money service (Go) — design
 
-Status: **proposed**. Decisions this design rests on: **US first**, and Sagolik Close stays **an orchestration layer only**. It never holds, receives or moves client funds.
+Status: **M1 (foundation) implemented** in `services/money` — see its README. M2 onwards not started. Decisions this design rests on: **US first**, and Sagolik Close stays **an orchestration layer only**. It never holds, receives or moves client funds.
 
 ## 1. What "orchestration only" means for money in the US
 
@@ -136,7 +136,7 @@ POST /webhooks/{provider}
 
 The rules already exist in `packages/core/src/services/{banking,payments,escrow}.ts` and the SQL guards. We port the behaviour, keep the existing tests as the specification, and switch over behind a flag.
 
-1. **M1 — Skeleton:**
+1. **M1 — Skeleton** ✅ done:
    - the Go service, OpenAPI spec, database, KMS envelope encryption, mTLS and user assertions
    - health endpoints and CI gates
    - local development with LocalStack KMS
