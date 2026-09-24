@@ -66,6 +66,7 @@ export function Hero() {
         </div>
         <div className="animate-rise [animation-delay:120ms]">
           <HeroMockup />
+          <p className="mt-3 text-center text-[12px] text-ink-3">Illustration with fictional demo data.</p>
         </div>
       </div>
     </section>
@@ -77,7 +78,7 @@ export function Hero() {
 export function TrustRail() {
   const items = [
     ["identity", "Secure Identity", "KYC & fraud protection"],
-    ["signatures", "Digital Signatures", "eSign compliant"],
+    ["signatures", "Digital Signatures", "Via your e-sign provider"],
     ["escrow", "Escrow Coordination", "Real-time visibility"],
     ["documents", "Document Vault", "Encrypted & versioned"],
     ["title", "Audit Trails", "Complete transparency"],
@@ -220,10 +221,11 @@ export function BuyerExperience() {
     <section id="buyers" className="scroll-mt-24 border-t border-line bg-paper py-20" aria-labelledby="buyers-title">
       <div className="container-page grid items-center gap-12 lg:grid-cols-2">
         <div>
-          <SectionHeading eyebrow="For buyers" title="Understand your closing in ten seconds" id="buyers-title">
+          <SectionHeading eyebrow="For buyers" title="Understand your closing at a glance" id="buyers-title">
             No jargon, no chasing emails. Your home screen shows how far along you are, the one thing that needs you next, where your money is and who is responsible for everything else.
           </SectionHeading>
-          <ul className="mt-8 space-y-3 text-[15px] text-ink-2">
+          <p className="mt-8 text-[13px] font-medium uppercase tracking-[0.12em] text-ink-3">Messages the app shows, in plain language</p>
+          <ul className="mt-3 space-y-3 text-[15px] text-ink-2">
             {[
               "“We're verifying your identity. Usually this takes less than a few minutes.”",
               "“Your transfer has been received and is being finalized.”",
@@ -280,6 +282,7 @@ export function BuyerExperience() {
             </div>
           </div>
         </div>
+        <p className="mt-3 text-center text-[12px] text-ink-3">Illustration with fictional demo data.</p>
       </div>
     </section>
   );
@@ -370,6 +373,7 @@ export function ProfessionalExperience() {
           </table>
         </div>
       </div>
+        <p className="mt-3 text-center text-[12px] text-ink-3">Illustration with fictional demo data.</p>
     </section>
   );
 }
@@ -381,7 +385,7 @@ export function Banking() {
     <section className="py-20" aria-labelledby="banking-title">
       <div className="container-page grid gap-12 lg:grid-cols-2">
         <SectionHeading eyebrow="Bank & open-banking connectivity" title="We never ask for your banking password" id="banking-title">
-          You connect through your own bank's consent screen, via a regulated open-banking provider. We see only what you allow — account ownership, masked account numbers and balances — and you can disconnect at any time.
+          You connect through your own bank's consent screen, through an open-banking provider such as Plaid. We see only what you allow — account ownership, masked account numbers and balances — and you can disconnect at any time.
         </SectionHeading>
         <ol className="space-y-3">
           {[
@@ -618,26 +622,25 @@ export function Integrations() {
   );
 }
 
-// ----------------------------------------------------------------------------- 15 Testimonials (placeholders)
+// ----------------------------------------------------------------------------- 15 Pilot program
 
-export function Testimonials() {
+export function PilotProgram() {
   return (
-    <section className="py-20" aria-labelledby="stories-title">
+    <section className="py-20" aria-labelledby="pilot-title">
       <div className="container-page">
-        <SectionHeading eyebrow="Customer stories" title="Real results, when they're real" id="stories-title">
-          We publish customer stories and metrics only after they happen. Our pilot program is open to agencies, title companies and lenders.
-        </SectionHeading>
-        <div className="mt-10 grid gap-4 md:grid-cols-3">
-          {["Agency pilot", "Title & escrow pilot", "Lender pilot"].map((t) => (
-            <div key={t} className="rounded-xl border-2 border-dashed border-line-strong bg-paper/60 p-6">
-              <p className="eyebrow">Placeholder</p>
-              <p className="mt-2 font-display text-xl text-navy-800">{t}</p>
-              <p className="mt-2 text-sm text-ink-3">This space is reserved for a verified customer story.</p>
-              <Link href="/contact" className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-teal-700">
-                Join the pilot <ArrowRight className="h-4 w-4" aria-hidden />
-              </Link>
-            </div>
-          ))}
+        <div className="rounded-2xl border border-line bg-paper p-8 md:flex md:items-center md:justify-between md:gap-10">
+          <div className="max-w-2xl">
+            <p className="eyebrow mb-3 text-teal-700">Pilot program</p>
+            <h2 id="pilot-title" className="text-[30px] leading-tight text-navy-800">
+              We&apos;re early, and we say so.
+            </h2>
+            <p className="mt-3 text-[15px] leading-relaxed text-ink-2">
+              Sagolik Close is in its pilot phase. We don&apos;t show customer quotes, logos, ratings or usage figures until real customers have agreed to share them. If you run an agency, a title or escrow company, or a lending team, you can shape what we build next.
+            </p>
+          </div>
+          <Link href="/contact?topic=access" className={buttonClasses("primary", "lg", "mt-6 shrink-0 md:mt-0")}>
+            Join the pilot <ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
         </div>
       </div>
     </section>
@@ -658,14 +661,14 @@ export function Pricing({ plans }: { plans: PlanView[] }) {
     <section id="pricing" className="scroll-mt-24 border-t border-line bg-paper py-20" aria-labelledby="pricing-title">
       <div className="container-page">
         <SectionHeading eyebrow="Pricing" title="Plans for every side of the table" align="center" id="pricing-title">
-          Pricing is set per market and volume. Buyers and sellers invited by a professional never pay to use Sagolik Close.
+          During the pilot, pricing is agreed with each customer. Buyers and sellers join when a professional on their transaction invites them.
         </SectionHeading>
         <ul className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {plans.map((p) => (
             <li key={p.key} className={`flex flex-col rounded-xl border p-6 ${p.key === "professional" ? "border-navy-800 ring-1 ring-navy-800" : "border-line"}`}>
               <p className="eyebrow">{p.audience}</p>
               <h3 className="mt-2 text-[28px] text-navy-800">{p.name}</h3>
-              <p className="mt-1 text-sm text-ink-3">{p.key === "consumer" ? "Included" : "Talk to us"}</p>
+              <p className="mt-1 text-sm text-ink-3">{p.key === "consumer" ? "By invitation" : "Priced during the pilot"}</p>
               <ul className="mt-5 flex-1 space-y-2 text-sm text-ink-2">
                 {p.features.map((f) => (
                   <li key={f} className="flex gap-2">
@@ -690,11 +693,11 @@ export function Pricing({ plans }: { plans: PlanView[] }) {
 export function Faq() {
   const qa = [
     ["Does Sagolik Close hold my money?", "No. Funds are held by the licensed escrow, title or trust-account provider on your transaction. Sagolik Close coordinates the instructions, approvals and status, and records settlement only when that provider confirms it."],
-    ["Will you ever ask for my online-banking password?", "Never. Bank connections happen on your bank's own consent page through a regulated open-banking provider. If anyone asks for your banking password in our name, it's fraud."],
+    ["Will you ever ask for my online-banking password?", "Never. Bank connections happen on your bank's own consent page through an open-banking provider. If anyone asks for your banking password in our name, it's fraud."],
     ["What if payment instructions change?", "Any change creates a new version that must be independently verified by a second person, triggers a security notice to every party and enters a waiting period before it can be used. Always confirm by phone using a number you already know."],
     ["Is my identity document stored by Sagolik Close?", "Identity checks are performed by a specialist provider. We store the minimum result needed — for example “verified” and which checks passed — not your ID images, unless a jurisdiction requires it."],
     ["Does the AI assistant make decisions?", "No. The assistant explains your transaction using the same structured data you see. It cannot move money, change bank details, approve checks, sign or transfer ownership."],
-    ["Which markets are supported?", "Our workflow engine models each jurisdiction separately — Texas first, with California, Sweden, Poland, Germany, Liechtenstein and Switzerland in progress. We don't pretend one workflow fits every market."],
+    ["Which markets are supported?", "Our workflow engine models each jurisdiction separately — the United States first. Rules for Texas, California, Sweden, Poland, Germany, Liechtenstein and Switzerland are modelled as a starting point and each needs local legal review before launch there. We don't pretend one workflow fits every market."],
   ];
   return (
     <section className="py-20" aria-labelledby="faq-title">

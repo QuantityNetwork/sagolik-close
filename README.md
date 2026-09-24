@@ -98,7 +98,7 @@ docs/             Architecture, data model, security, threat model, integrations
 | Area | State |
 | --- | --- |
 | Domain model, state machine, RLS, services, web app, demo | Implemented and tested |
-| Banking (Plaid), email (Resend), SMS (Twilio) | Production adapters implemented |
+| Banking (Plaid), email (Resend), SMS (Twilio) | Adapters written against the providers' documented APIs; not yet run against live accounts |
 | Identity (e.g. Persona), e-signature (e.g. DocuSign), payments and escrow partner | Interfaces and sandbox adapters are implemented. Production adapters are **not yet written**, and production start-up refuses to run on sandbox adapters. |
 | Property data, mortgage, title, insurance | Manual adapters, where professionals enter the data |
 | Legal pages | Drafts; they need counsel review |

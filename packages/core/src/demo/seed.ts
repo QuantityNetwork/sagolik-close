@@ -132,9 +132,9 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
   member(orgs.lender.id, "michael.reed", "organization_admin");
 
   add("plans", { id: did("plan:consumer"), key: "consumer", name: "Consumer", audience: "consumer", priceMonthly: null, currency: "USD", features: ["Invited by your agent or escrow", "Your closing, documents and money in one place", "Home Record after closing"], active: true, sortOrder: 1, ...base(-90) });
-  add("plans", { id: did("plan:professional"), key: "professional", name: "Professional", audience: "professional", priceMonthly: null, currency: "USD", features: ["Unlimited transactions", "Command center", "Signatures and identity included"], active: true, sortOrder: 2, ...base(-90) });
-  add("plans", { id: did("plan:team"), key: "team", name: "Team", audience: "team", priceMonthly: null, currency: "USD", features: ["Everything in Professional", "Shared portfolio and coordination", "Organization branding"], active: true, sortOrder: 3, ...base(-90) });
-  add("plans", { id: did("plan:enterprise"), key: "enterprise", name: "Enterprise", audience: "enterprise", priceMonthly: null, currency: "USD", features: ["SSO and SCIM", "Custom integrations and API", "Dedicated support and SLAs"], active: true, sortOrder: 4, ...base(-90) });
+  add("plans", { id: did("plan:professional"), key: "professional", name: "Professional", audience: "professional", priceMonthly: null, currency: "USD", features: ["Transaction workspaces", "Command center across your files", "E-signature and identity checks through connected providers"], active: true, sortOrder: 2, ...base(-90) });
+  add("plans", { id: did("plan:team"), key: "team", name: "Team", audience: "team", priceMonthly: null, currency: "USD", features: ["Everything in Professional", "Shared portfolio and coordination", "Organization roles and permissions"], active: true, sortOrder: 3, ...base(-90) });
+  add("plans", { id: did("plan:enterprise"), key: "enterprise", name: "Enterprise", audience: "enterprise", priceMonthly: null, currency: "USD", features: ["SAML single sign-on", "REST API and signed webhooks", "Audit exports for your compliance team"], active: true, sortOrder: 4, ...base(-90) });
 
   // ------------------------------------------------------------------ helpers per transaction
   interface TxSpec {

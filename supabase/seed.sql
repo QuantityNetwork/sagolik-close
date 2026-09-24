@@ -88,9 +88,9 @@ insert into public.organization_settings (id, organization_id, default_jurisdict
 -- plans
 insert into public.plans (id, key, name, audience, price_monthly, currency, features, active, sort_order, created_at, updated_at) values
   ('90d9a898-93d2-4446-bc48-a46a2486b435', 'consumer', 'Consumer', 'consumer', null, 'USD', '{"Invited by your agent or escrow","Your closing, documents and money in one place","Home Record after closing"}', true, 1, ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift))),
-  ('a8d8668f-3cf0-4fd6-8054-dacb7f3f963f', 'professional', 'Professional', 'professional', null, 'USD', '{"Unlimited transactions","Command center","Signatures and identity included"}', true, 2, ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift))),
-  ('421a59b6-d5d0-48b6-9b59-ad8aa5f04422', 'team', 'Team', 'team', null, 'USD', '{"Everything in Professional","Shared portfolio and coordination","Organization branding"}', true, 3, ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift))),
-  ('d5dba22c-44f2-40fd-8f6e-31d1c02b1880', 'enterprise', 'Enterprise', 'enterprise', null, 'USD', '{"SSO and SCIM","Custom integrations and API","Dedicated support and SLAs"}', true, 4, ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
+  ('a8d8668f-3cf0-4fd6-8054-dacb7f3f963f', 'professional', 'Professional', 'professional', null, 'USD', '{"Transaction workspaces","Command center across your files","E-signature and identity checks through connected providers"}', true, 2, ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift))),
+  ('421a59b6-d5d0-48b6-9b59-ad8aa5f04422', 'team', 'Team', 'team', null, 'USD', '{"Everything in Professional","Shared portfolio and coordination","Organization roles and permissions"}', true, 3, ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift))),
+  ('d5dba22c-44f2-40fd-8f6e-31d1c02b1880', 'enterprise', 'Enterprise', 'enterprise', null, 'USD', '{"SAML single sign-on","REST API and signed webhooks","Audit exports for your compliance team"}', true, 4, ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), ('2026-06-24T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
 
 -- properties
 insert into public.properties (id, organization_id, address_line1, address_line2, city, region, postal_code, country, latitude, longitude, parcel_id, property_type, year_built, living_area, area_unit, bedrooms, bathrooms, lot_size, image_urls, property_tax_annual, hoa_monthly, energy_rating, legal_description, currency, created_at, updated_at) values
@@ -311,7 +311,7 @@ insert into public.bank_connections (id, user_id, transaction_id, provider, inst
 
 -- bank_connection_secrets
 insert into public.bank_connection_secrets (id, connection_id, encrypted_access_token, key_version, created_at) values
-  ('3978d0f3-ded4-48b0-b373-1fb8b4c9536e', '50c4d9ac-9294-480d-9e06-a278c6ead3e7', 'v1.wMbqXQ5H7qypUWGE.g7cXdmAYf1OcbWXJVLfMWA.Qf90ZdwjHzSyo5rp2K2tIA4Q39bvcrTOd28', 1, ('2026-08-28T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
+  ('3978d0f3-ded4-48b0-b373-1fb8b4c9536e', '50c4d9ac-9294-480d-9e06-a278c6ead3e7', 'v1.HOLJL3JELAgm3LhX.JTFE2h5dR7rCn2shNQSl_w.zFgrY8DmV-bdqkVr9ask_d1FQ5LGCEPZiC4', 1, ('2026-08-28T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
 
 -- bank_accounts
 insert into public.bank_accounts (id, connection_id, user_id, external_account_id, name, mask, currency, available_balance, current_balance, balance_as_of, owner_names, ownership_verified, ownership_verified_at, created_at, updated_at) values
@@ -320,7 +320,7 @@ insert into public.bank_accounts (id, connection_id, user_id, external_account_i
 
 -- bank_instructions
 insert into public.bank_instructions (id, transaction_id, purpose, beneficiary_name, bank_name, account_mask, routing_identifier, encrypted_account_number, currency, status, version, previous_version_id, verified_by, verified_at, verification_method, effective_after, created_by, created_at) values
-  ('63481d6a-6f90-49f9-855d-d7c4b8247b9a', 'a8db1096-1336-4467-8fd9-6415bd8939c0', 'closing_funds_to_escrow', 'Maple Title & Escrow (Demo) — Trust Account', 'Sandbox National Bank', '6789', '021000021', 'v1.JqPJ1znvwJRleJXi.gZ_lC2O-WOJdoMBQ3yucfQ.Vh1NG5Pv4ne7xGXc', 'USD', 'verified', 1, null, '43964358-5d5f-4521-a52c-63562021c400', ('2026-08-27T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), 'out_of_band_call', null, '4a6a4324-5fc8-4baa-a828-14210de77d3c', ('2026-08-26T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
+  ('63481d6a-6f90-49f9-855d-d7c4b8247b9a', 'a8db1096-1336-4467-8fd9-6415bd8939c0', 'closing_funds_to_escrow', 'Maple Title & Escrow (Demo) — Trust Account', 'Sandbox National Bank', '6789', '021000021', 'v1.Z5vn8ieemBPYlp8Y.89xldQpX45ofRRaJb3q9Dw.rrRYUR-d-sFHiumU', 'USD', 'verified', 1, null, '43964358-5d5f-4521-a52c-63562021c400', ('2026-08-27T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)), 'out_of_band_call', null, '4a6a4324-5fc8-4baa-a828-14210de77d3c', ('2026-08-26T15:00:00.000Z'::timestamptz + (select shift from _seed_shift)));
 
 -- payments
 insert into public.payments (id, transaction_id, type, rail, status, amount, currency, from_account_id, bank_instruction_id, provider, external_payment_id, idempotency_key, initiated_by, approved_by, requires_dual_approval, settled_at, failure_reason, created_at, updated_at) values

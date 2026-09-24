@@ -19,7 +19,7 @@ import {
   Security,
   SellerExperience,
   SiteFooter,
-  Testimonials,
+  PilotProgram,
   TrustRail,
 } from "@/components/landing/sections";
 
@@ -45,7 +45,7 @@ export default async function LandingPage() {
         <BrighterTomorrow />
         <Parties />
         <Integrations />
-        <Testimonials />
+        <PilotProgram />
         <Pricing plans={plans} />
         <Faq />
         <FinalCta />

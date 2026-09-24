@@ -1,5 +1,7 @@
 # Integrations
 
+Every external capability sits behind an interface. Adapters marked **bold** below are written against the provider's documented API but have **not yet been exercised against a live account**; treat them as untested until a sandbox run is recorded here.
+
 Every external capability sits behind an interface in `packages/integrations`. `createProviders(env)` (in `registry.ts`) picks the real adapter when its credentials are configured, and a clearly labelled sandbox adapter when they are not. Each adapter reports `info.mode` (`production`, `sandbox` or `mock`). The admin console and `/api/health` show the mode.
 
 **Production refuses to start** while identity, signatures, payments, escrow or banking are on sandbox adapters.

@@ -6,7 +6,7 @@ const ROWS = [
   ["Holding funds", "Never. Escrow and closing funds are held by the licensed escrow or title company.", "Shows status reported by that provider's signed webhooks."],
   ["Payment instructions", "Never accepted by email or chat.", "Versioned instructions with cooling-off, dual approval and step-up confirmation."],
   ["Identity & AML decisions", "Never automated by AI.", "Provider results plus a named human reviewer for any exception."],
-  ["Signatures", "Never applied on a user's behalf.", "Hand-off to a certified e-signature provider; signed copies are hashed and stored."],
+  ["Signatures", "Never applied on a user's behalf.", "Hand-off to an e-signature provider; signed copies are hashed and stored."],
   ["Title & recording", "Never marked complete by a button.", "Ownership is recorded only from a registry confirmation reference."],
   ["Advice", "No legal, tax or lending advice.", "Plain-language explanations and pointers to the responsible professional."],
 ] as const;
