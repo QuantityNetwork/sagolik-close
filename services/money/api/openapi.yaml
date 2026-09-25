@@ -44,12 +44,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [transactionId, balances]
+                required: [transactionId, balances, proofOfFunds]
                 properties:
                   transactionId: { type: string, format: uuid }
                   balances:
                     type: array
                     items: { $ref: "#/components/schemas/Balance" }
+                  proofOfFunds:
+                    type: array
+                    description: Latest proof-of-funds result per account. Results only, never balances.
+                    items: { $ref: "#/components/schemas/ProofOfFunds" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
   /v1/transactions/{id}/instructions:
@@ -148,6 +152,103 @@ paths:
         "403": { $ref: "#/components/responses/StepUpRequired" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: Key reused with different contents, or payout exceeds funds reported held, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/transactions/{id}/bank-links:
+    post:
+      summary: Start Plaid Hosted Link (payer only)
+      description: Returns Plaid's hosted URL. Plaid sends the person back to the configured redirect URI with ?link={linkId}.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: false, properties: { legalName: { type: string, maxLength: 140 } } }
+      responses:
+        "201":
+          description: Started
+          content:
+            application/json:
+              schema: { type: object, required: [linkId, hostedLinkUrl, expiresAt], properties: { linkId: { type: string, format: uuid }, hostedLinkUrl: { type: string, format: uri }, expiresAt: { type: string, format: date-time } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { $ref: "#/components/responses/ProviderError" }
+        "503": { description: Bank connections aren't configured, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/bank-links/{lid}/complete:
+    post:
+      summary: Finish a Hosted Link session (same person, same transaction; idempotent)
+      description: Exchanges the public token, stores the sealed access token, and checks each account's owner names against legalName.
+      parameters:
+        - { name: lid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [legalName], additionalProperties: false, properties: { legalName: { type: string, minLength: 2, maxLength: 140 } } }
+      responses:
+        "201": { description: Connected, content: { application/json: { schema: { type: object, properties: { connection: { $ref: "#/components/schemas/BankConnection" } } } } } }
+        "200": { description: Already completed; the same connection, content: { application/json: { schema: { type: object, properties: { connection: { $ref: "#/components/schemas/BankConnection" } } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "link_not_finished, expired, or completed concurrently", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "502": { $ref: "#/components/responses/ProviderError" }
+  /v1/transactions/{id}/bank-connections:
+    get:
+      summary: The caller's own bank connections for this transaction (masked)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: Connections, content: { application/json: { schema: { type: object, properties: { connections: { type: array, items: { $ref: "#/components/schemas/BankConnection" } } } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/bank-connections/{cid}/refresh:
+    post:
+      summary: Re-check account ownership (owner only)
+      parameters:
+        - { name: cid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [legalName], additionalProperties: false, properties: { legalName: { type: string, minLength: 2, maxLength: 140 } } }
+      responses:
+        "200": { description: Refreshed, content: { application/json: { schema: { type: object, properties: { connection: { $ref: "#/components/schemas/BankConnection" } } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: "reconnect_required: the person must go through Plaid again", content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/bank-connections/{cid}/accounts/{aid}/proof-of-funds:
+    post:
+      summary: Compare a real-time balance with the amount required (owner only; at most 5 per account per hour)
+      description: The response includes the balance, for the account owner only. Other parties see the result through /funds.
+      parameters:
+        - { name: cid, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: aid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [requiredAmount, currency], additionalProperties: false, properties: { requiredAmount: { type: integer, minimum: 1, description: Cents }, currency: { type: string, pattern: "^[A-Z]{3}$" } } }
+      responses:
+        "201": { description: Checked, content: { application/json: { schema: { type: object, properties: { fundsCheck: { $ref: "#/components/schemas/FundsCheck" } } } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Disconnected or reconnect required, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "429": { description: Checked too often, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/bank-connections/{cid}/disconnect:
+    post:
+      summary: Revoke at Plaid and destroy the access token (owner only; step-up)
+      parameters:
+        - { name: cid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false } } } }
+      responses:
+        "200": { description: Revoked, content: { application/json: { schema: { type: object, properties: { connection: { $ref: "#/components/schemas/BankConnection" } } } } } }
+        "403": { $ref: "#/components/responses/StepUpRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /webhooks/plaid:
+    post:
+      summary: Plaid webhooks (separate listener, MONEY_WEBHOOK_ADDR; no user assertion)
+      description: Requires a valid Plaid-Verification JWT (ES256, issued within 5 minutes, SHA-256 of the exact body). Stored once per body.
+      security: []
+      parameters:
+        - { name: Plaid-Verification, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Processed, duplicate or ignored }
+        "401": { description: Signature check failed }
+        "503": { description: Verification key unavailable; Plaid retries }
 components:
   securitySchemes:
     userAssertion:
@@ -195,7 +296,60 @@ components:
         verifiedBy: { type: [string, "null"], format: uuid }
         verifiedAt: { type: [string, "null"], format: date-time }
         verificationMethod: { type: [string, "null"] }
+    BankConnection:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        provider: { type: string, enum: [plaid] }
+        institutionName: { type: string }
+        status: { type: string, enum: [connected, reauthentication_required, expired, revoked, error] }
+        statusAt: { type: string, format: date-time }
+        consentExpiresAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        accounts: { type: array, items: { $ref: "#/components/schemas/BankAccount" } }
+    BankAccount:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        connectionId: { type: string, format: uuid }
+        name: { type: string }
+        mask: { type: string, maxLength: 4 }
+        type: { type: string }
+        subtype: { type: string }
+        currency: { type: string }
+        ownershipMatched: { type: [boolean, "null"] }
+        ownershipCheckedAt: { type: [string, "null"], format: date-time }
+        lastFundsCheck: { oneOf: [{ $ref: "#/components/schemas/FundsCheck" }, { type: "null" }] }
+    FundsCheck:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        accountId: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        checkedBy: { type: string, format: uuid }
+        requiredAmount: { type: integer }
+        currency: { type: string }
+        available: { type: [integer, "null"], description: Cents; returned to the account owner only }
+        current: { type: [integer, "null"] }
+        sufficient: { type: boolean, description: The available balance covers the amount required }
+        checkedAt: { type: string, format: date-time }
+    ProofOfFunds:
+      type: object
+      properties:
+        userId: { type: string, format: uuid }
+        institutionName: { type: string }
+        accountMask: { type: string }
+        ownershipMatched: { type: boolean }
+        requiredAmount: { type: integer }
+        currency: { type: string }
+        sufficient: { type: boolean }
+        checkedAt: { type: string, format: date-time }
   responses:
+    ProviderError:
+      description: Plaid failed; the message is written for people
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     BadRequest:
       description: Invalid input
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

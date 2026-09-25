@@ -38,6 +38,15 @@ type Config struct {
 
 	// CoolingOff is the waiting period before changed payment instructions can be used.
 	CoolingOff time.Duration
+
+	// Plaid (bank connections). PlaidEnv "off" disables the bank endpoints.
+	PlaidEnv         string // off | sandbox | production
+	PlaidClientID    string
+	PlaidSecret      redact.Secret
+	PlaidSecretFile  string
+	PlaidRedirectURI string // the web app's callback for Hosted Link
+	PlaidWebhookURL  string // public URL that reaches WebhookAddr (optional)
+	WebhookAddr      string // listener for provider webhooks (no mTLS; signature-checked)
 }
 
 // Load parses configuration using getenv (os.Getenv in production).
@@ -65,6 +74,13 @@ func Load(getenv func(string) string) (Config, error) {
 		AssertionJWKSFile:          get("MONEY_ASSERTION_JWKS_FILE", ""),
 		AssertionIssuer:            get("MONEY_ASSERTION_ISSUER", "sagolik-web"),
 		AssertionAudience:          get("MONEY_ASSERTION_AUDIENCE", "sagolik-money"),
+		PlaidEnv:                   get("MONEY_PLAID_ENV", "off"),
+		PlaidClientID:              get("MONEY_PLAID_CLIENT_ID", ""),
+		PlaidSecret:                redact.NewSecret(get("MONEY_PLAID_SECRET", "")),
+		PlaidSecretFile:            get("MONEY_PLAID_SECRET_FILE", ""),
+		PlaidRedirectURI:           get("MONEY_PLAID_REDIRECT_URI", ""),
+		PlaidWebhookURL:            get("MONEY_PLAID_WEBHOOK_URL", ""),
+		WebhookAddr:                get("MONEY_WEBHOOK_ADDR", ""),
 	}
 	hours, err := strconv.Atoi(get("MONEY_COOLING_OFF_HOURS", "24"))
 	if err != nil || hours < 1 || hours > 168 {
@@ -124,5 +140,44 @@ func (c Config) validate() error {
 	if c.AssertionJWKSFile == "" {
 		bad("MONEY_ASSERTION_JWKS_FILE is required (the web app's public keys)")
 	}
+	c.validatePlaid(bad)
 	return errors.Join(errs...)
+}
+
+func (c Config) validatePlaid(bad func(string, ...any)) {
+	switch c.PlaidEnv {
+	case "off":
+		return
+	case "sandbox":
+		if c.Env == "production" {
+			bad("MONEY_PLAID_ENV=sandbox is not allowed when MONEY_ENV=production")
+		}
+	case "production":
+	default:
+		bad("MONEY_PLAID_ENV must be off, sandbox or production")
+		return
+	}
+	if c.PlaidClientID == "" {
+		bad("MONEY_PLAID_CLIENT_ID is required when Plaid is on")
+	}
+	if c.PlaidSecret.IsZero() == (c.PlaidSecretFile == "") {
+		bad("set exactly one of MONEY_PLAID_SECRET_FILE or MONEY_PLAID_SECRET (e.g. injected from AWS Secrets Manager)")
+	}
+	checkURL := func(name, v string, required bool) {
+		if v == "" {
+			if required {
+				bad("%s is required when Plaid is on", name)
+			}
+			return
+		}
+		u, err := url.Parse(v)
+		if err != nil || u.Host == "" || (u.Scheme != "https" && !(c.Env == "local" && u.Scheme == "http")) {
+			bad("%s must be an https URL", name)
+		}
+	}
+	checkURL("MONEY_PLAID_REDIRECT_URI", c.PlaidRedirectURI, true)
+	checkURL("MONEY_PLAID_WEBHOOK_URL", c.PlaidWebhookURL, false)
+	if c.PlaidWebhookURL != "" && c.WebhookAddr == "" {
+		bad("MONEY_WEBHOOK_ADDR is required when MONEY_PLAID_WEBHOOK_URL is set")
+	}
 }

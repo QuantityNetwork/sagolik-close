@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -71,5 +72,52 @@ func TestDatabaseURLNeverPrinted(t *testing.T) {
 	c, _ := Load(env(m))
 	if s := strings.Join([]string{c.DatabaseURL.String()}, ""); strings.Contains(s, "hunter2") {
 		t.Fatal("database url leaked")
+	}
+}
+
+func plaidOn(m map[string]string) map[string]string {
+	m["MONEY_PLAID_ENV"], m["MONEY_PLAID_CLIENT_ID"], m["MONEY_PLAID_SECRET_FILE"] = "sandbox", "client", "/run/secrets/plaid"
+	m["MONEY_PLAID_REDIRECT_URI"] = "https://close.sagolik.com/api/v1/bank-connections/callback"
+	return m
+}
+
+func TestPlaidConfig(t *testing.T) {
+	c, err := Load(env(base()))
+	if err != nil || c.PlaidEnv != "off" {
+		t.Fatalf("plaid should default to off: %v %q", err, c.PlaidEnv)
+	}
+	if _, err := Load(env(plaidOn(base()))); err != nil {
+		t.Fatalf("sandbox plaid should load: %v", err)
+	}
+	cases := map[string]func(m map[string]string){
+		"unknown env": func(m map[string]string) { m["MONEY_PLAID_ENV"] = "development" },
+		"sandbox in production": func(m map[string]string) {
+			m["MONEY_ENV"], m["MONEY_KEY_PROVIDER"], m["MONEY_KMS_KEY_ID"] = "production", "awskms", "k"
+		},
+		"no client id": func(m map[string]string) { delete(m, "MONEY_PLAID_CLIENT_ID") },
+		"no secret":    func(m map[string]string) { delete(m, "MONEY_PLAID_SECRET_FILE") },
+		"two secrets":  func(m map[string]string) { m["MONEY_PLAID_SECRET"] = "s" },
+		"no redirect":  func(m map[string]string) { delete(m, "MONEY_PLAID_REDIRECT_URI") },
+		"http redirect": func(m map[string]string) {
+			m["MONEY_ENV"], m["MONEY_PLAID_REDIRECT_URI"] = "staging", "http://close.example/cb"
+		},
+		"webhook without listener": func(m map[string]string) { m["MONEY_PLAID_WEBHOOK_URL"] = "https://hooks.example/webhooks/plaid" },
+	}
+	for name, mutate := range cases {
+		m := plaidOn(base())
+		mutate(m)
+		if _, err := Load(env(m)); err == nil {
+			t.Errorf("%s: expected refusal", name)
+		}
+	}
+	m := plaidOn(base())
+	delete(m, "MONEY_PLAID_SECRET_FILE")
+	m["MONEY_PLAID_SECRET"] = "very-secret-value"
+	c, err = Load(env(m))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(fmt.Sprintf("%v %+v", c, c), "very-secret-value") {
+		t.Fatal("plaid secret printed")
 	}
 }

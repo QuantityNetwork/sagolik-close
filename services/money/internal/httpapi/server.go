@@ -16,6 +16,7 @@ import (
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/assertion"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/keys"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/policy"
+	"github.com/quantitynetwork/sagolik-close/services/money/internal/redact"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/store"
 )
 
@@ -30,6 +31,23 @@ type Store interface {
 	ListInstructions(ctx context.Context, txID string, now time.Time) ([]store.Instruction, error)
 	VerifyInstruction(ctx context.Context, id, actor, method, reference, requestID string, now time.Time) (store.Instruction, error)
 	RevealInstruction(ctx context.Context, env store.Sealer, id, actor, requestID string, now time.Time) (store.Revealed, error)
+
+	CreateLink(ctx context.Context, env store.Sealer, n store.NewLink) (store.Link, error)
+	GetLink(ctx context.Context, env store.Sealer, id string) (store.Link, redact.Secret, error)
+	CreateConnection(ctx context.Context, env store.Sealer, n store.NewConnection) (store.Connection, error)
+	GetConnection(ctx context.Context, id string) (store.Connection, error)
+	ListConnections(ctx context.Context, txID, userID string) ([]store.Connection, error)
+	AccessToken(ctx context.Context, env store.Sealer, connectionID string) (redact.Secret, error)
+	PlaidAccountID(ctx context.Context, connectionID, accountID string) (string, error)
+	RecordRefresh(ctx context.Context, connectionID, actor string, accounts []store.NewAccount, requestID string) error
+	SetStatus(ctx context.Context, connectionID, status, source, detail, requestID string) error
+	Disconnect(ctx context.Context, connectionID, actor, source, requestID string) error
+	RecentFundsChecks(ctx context.Context, accountID string, since time.Time) (int, error)
+	RecordFundsCheck(ctx context.Context, n store.NewFundsCheck) (store.FundsCheck, error)
+	ProofOfFundsFor(ctx context.Context, txID string) ([]store.ProofOfFunds, error)
+	WebhookSeen(ctx context.Context, bodySHA256 []byte) (bool, error)
+	ConnectionForItem(ctx context.Context, itemID string) (string, error)
+	RecordWebhook(ctx context.Context, bodySHA256 []byte, typ, code, itemID string) error
 }
 
 // Sealer is the envelope-encryption dependency (used by readiness).
@@ -45,6 +63,7 @@ type Server struct {
 	Log        *slog.Logger
 	Now        func() time.Time
 	CoolingOff time.Duration // waiting period for changed instructions (default 24h)
+	Bank       BankConfig
 }
 
 func (s *Server) now() time.Time {
@@ -64,6 +83,12 @@ func (s *Server) APIHandler() http.Handler {
 	mux.HandleFunc("POST /v1/instructions/{iid}/verify", s.authed(s.verifyInstruction))
 	mux.HandleFunc("POST /v1/instructions/{iid}/reveal", s.authed(s.revealInstruction))
 	mux.HandleFunc("POST /v1/transactions/{id}/ledger/movements", s.authed(s.recordMovement))
+	mux.HandleFunc("POST /v1/transactions/{id}/bank-links", s.authed(s.startBankLink))
+	mux.HandleFunc("POST /v1/bank-links/{lid}/complete", s.authed(s.completeBankLink))
+	mux.HandleFunc("GET /v1/transactions/{id}/bank-connections", s.authed(s.listBankConnections))
+	mux.HandleFunc("POST /v1/bank-connections/{cid}/refresh", s.authed(s.refreshBankConnection))
+	mux.HandleFunc("POST /v1/bank-connections/{cid}/accounts/{aid}/proof-of-funds", s.authed(s.proofOfFunds))
+	mux.HandleFunc("POST /v1/bank-connections/{cid}/disconnect", s.authed(s.disconnectBank))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "No such endpoint.")
 	})
@@ -176,7 +201,13 @@ func (s *Server) funds(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, err) // no audit, no data
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"transactionId": id, "balances": summary})
+	proof, err := s.Store.ProofOfFundsFor(r.Context(), id)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	// Proof of funds: the result per account, never the balance.
+	writeJSON(w, http.StatusOK, map[string]any{"transactionId": id, "balances": summary, "proofOfFunds": proof})
 }
 
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {

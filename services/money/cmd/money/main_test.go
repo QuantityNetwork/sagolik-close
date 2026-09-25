@@ -24,6 +24,7 @@ import (
 
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/keys"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/mtls"
+	"github.com/quantitynetwork/sagolik-close/services/money/internal/plaid/plaidtest"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/store"
 )
 
@@ -71,7 +72,16 @@ func TestServiceEndToEnd(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	jwks := `{"keys":[{"kty":"OKP","crv":"Ed25519","kid":"web-1","x":"` + base64.RawURLEncoding.EncodeToString(pub) + `"}]}`
 
+	fake := plaidtest.New()
+	defer fake.Close()
 	env := map[string]string{
+		"MONEY_PLAID_ENV":           "sandbox",
+		"MONEY_PLAID_CLIENT_ID":     plaidtest.ClientID,
+		"MONEY_PLAID_SECRET_FILE":   write("plaid-secret", []byte(plaidtest.Secret+"\n"), 0o600),
+		"MONEY_PLAID_BASE_URL":      fake.URL,
+		"MONEY_PLAID_REDIRECT_URI":  "https://close.example/api/v1/bank-connections/callback",
+		"MONEY_PLAID_WEBHOOK_URL":   "https://hooks.example/webhooks/plaid",
+		"MONEY_WEBHOOK_ADDR":        "127.0.0.1:0",
 		"MONEY_ENV":                 "local",
 		"MONEY_LISTEN_ADDR":         "127.0.0.1:0",
 		"MONEY_HEALTH_ADDR":         "127.0.0.1:0",
@@ -244,6 +254,122 @@ func TestServiceEndToEnd(t *testing.T) {
 		t.Fatalf("title officer can't record escrow movements: %d", code)
 	}
 
+	// ---- M3: bank connections through Plaid Hosted Link (stand-in Plaid)
+	const seller = "22222222-2222-4222-8222-222222222222"
+	if code, _ := post(txPath+"/bank-links", tokenFor(buyer, "buyer_agent", false), `{}`); code != 404 {
+		t.Fatalf("agent must not start a bank link: %d", code)
+	}
+	code, body = post(txPath+"/bank-links", tokenFor(buyer, "buyer", false), `{"legalName":"Olivia Carter"}`)
+	if code != 201 || !strings.HasPrefix(fmt.Sprint(body["hostedLinkUrl"]), "https://") {
+		t.Fatalf("start link: %d %v", code, body)
+	}
+	linkID := body["linkId"].(string)
+	complete := `{"legalName":"Olivia Carter"}`
+	if code, body := post("/v1/bank-links/"+linkID+"/complete", tokenFor(buyer, "buyer", false), complete); code != 409 || body["error"].(map[string]any)["code"] != "link_not_finished" {
+		t.Fatalf("complete before finishing: %d %v", code, body)
+	}
+	if !fake.FinishLink(fake.LastLinkToken()) {
+		t.Fatal("no link started at Plaid")
+	}
+	if code, _ := post("/v1/bank-links/"+linkID+"/complete", tokenFor(seller, "buyer", false), complete); code != 404 {
+		t.Fatalf("someone else must not complete the link: %d", code)
+	}
+	code, body = post("/v1/bank-links/"+linkID+"/complete", tokenFor(buyer, "buyer", false), complete)
+	if code != 201 {
+		t.Fatalf("complete: %d %v", code, body)
+	}
+	conn := body["connection"].(map[string]any)
+	connID := conn["id"].(string)
+	accts := conn["accounts"].([]any)
+	checking := accts[0].(map[string]any)
+	if conn["status"] != "connected" || len(accts) != 2 || checking["ownershipMatched"] != true || checking["mask"] != "0000" {
+		t.Fatalf("connection: %v", conn)
+	}
+	if strings.Contains(fmt.Sprint(body), "access-sandbox") || strings.Contains(fmt.Sprint(body), "item-") {
+		t.Fatalf("token or item id leaked: %v", body)
+	}
+	if code, body := post("/v1/bank-links/"+linkID+"/complete", tokenFor(buyer, "buyer", false), complete); code != 200 || body["connection"].(map[string]any)["id"] != connID {
+		t.Fatalf("completing again must return the same connection: %d %v", code, body)
+	}
+	if code, body := get(txPath+"/bank-connections", tokenFor(buyer, "buyer", false)); code != 200 || len(body["connections"].([]any)) != 1 {
+		t.Fatalf("list: %d %v", code, body)
+	}
+	if code, body := get(txPath+"/bank-connections", tokenFor(seller, "co_buyer", false)); code != 200 || len(body["connections"].([]any)) != 0 {
+		t.Fatalf("another payer must not see this connection: %d %v", code, body)
+	}
+	pof := "/v1/bank-connections/" + connID + "/accounts/" + checking["id"].(string) + "/proof-of-funds"
+	code, body = post(pof, tokenFor(buyer, "buyer", false), `{"requiredAmount":17500000,"currency":"USD"}`)
+	if code != 201 || body["fundsCheck"].(map[string]any)["sufficient"] != true || body["fundsCheck"].(map[string]any)["available"].(float64) != 25_000_000 {
+		t.Fatalf("proof of funds: %d %v", code, body)
+	}
+	if code, _ := post(pof, tokenFor(seller, "co_buyer", false), `{"requiredAmount":1,"currency":"USD"}`); code != 404 {
+		t.Fatalf("someone else must not check this account: %d", code)
+	}
+	code, body = get(txPath+"/funds", tokenFor(escrow, "escrow_officer", false))
+	proof := body["proofOfFunds"].([]any)
+	if code != 200 || len(proof) != 1 || proof[0].(map[string]any)["sufficient"] != true || proof[0].(map[string]any)["available"] != nil {
+		t.Fatalf("escrow sees the result, never the balance: %d %v", code, body)
+	}
+	if strings.Contains(fmt.Sprint(body), "25000000") {
+		t.Fatalf("balance leaked to escrow: %v", body)
+	}
+
+	// Plaid webhooks: signature-checked, stored once, status follows.
+	var itemID string
+	if err := admin2(t, ctx, e2eURL).QueryRow(ctx, `select item_id from bank_connections where id = $1`, connID).Scan(&itemID); err != nil {
+		t.Fatal(err)
+	}
+	hook := func(body []byte, sig string) (int, map[string]any) {
+		req, _ := http.NewRequest("POST", "http://"+addr.Webhook+"/webhooks/plaid", bytes.NewReader(body))
+		req.Header.Set("Plaid-Verification", sig)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&out)
+		return res.StatusCode, out
+	}
+	loginRequired := []byte(`{"webhook_type":"ITEM","webhook_code":"ERROR","item_id":"` + itemID + `","error":{"error_code":"ITEM_LOGIN_REQUIRED"},"environment":"sandbox"}`)
+	if code, _ := hook(loginRequired, "not-a-jwt"); code != 401 {
+		t.Fatalf("unsigned webhook: %d", code)
+	}
+	if code, _ := hook(loginRequired, fake.Sign([]byte(`{}`), time.Now())); code != 401 {
+		t.Fatalf("signature over another body: %d", code)
+	}
+	if code, body := hook(loginRequired, fake.Sign(loginRequired, time.Now())); code != 200 || body["status"] != "processed" {
+		t.Fatalf("webhook: %d %v", code, body)
+	}
+	if code, body := hook(loginRequired, fake.Sign(loginRequired, time.Now())); code != 200 || body["status"] != "duplicate" {
+		t.Fatalf("duplicate webhook: %d %v", code, body)
+	}
+	if _, body := get(txPath+"/bank-connections", tokenFor(buyer, "buyer", false)); body["connections"].([]any)[0].(map[string]any)["status"] != "reauthentication_required" {
+		t.Fatalf("status after webhook: %v", body)
+	}
+	if code, _ := hook([]byte(`{"webhook_type":"ITEM","webhook_code":"LOGIN_REPAIRED","item_id":"`+itemID+`","environment":"production"}`),
+		fake.Sign([]byte(`{"webhook_type":"ITEM","webhook_code":"LOGIN_REPAIRED","item_id":"`+itemID+`","environment":"production"}`), time.Now())); code != 200 {
+		t.Fatalf("other environment: %d", code)
+	}
+	if _, body := get(txPath+"/bank-connections", tokenFor(buyer, "buyer", false)); body["connections"].([]any)[0].(map[string]any)["status"] != "reauthentication_required" {
+		t.Fatal("a webhook for another Plaid environment must not change status")
+	}
+
+	// Disconnecting needs step-up, revokes at Plaid and destroys the token.
+	if code, _ := post("/v1/bank-connections/"+connID+"/disconnect", tokenFor(buyer, "buyer", false), `{}`); code != 403 {
+		t.Fatalf("disconnect without step-up: %d", code)
+	}
+	if code, body := post("/v1/bank-connections/"+connID+"/disconnect", tokenFor(buyer, "buyer", true), `{}`); code != 200 || body["connection"].(map[string]any)["status"] != "revoked" {
+		t.Fatalf("disconnect: %d %v", code, body)
+	}
+	if !fake.ItemRemoved(itemID) {
+		t.Fatal("item not removed at Plaid")
+	}
+	if code, _ := post(pof, tokenFor(buyer, "buyer", false), `{"requiredAmount":1,"currency":"USD"}`); code != 409 {
+		t.Fatalf("proof of funds after disconnect: %d", code)
+	}
+
 	// Everything above is in the audit chain, and it verifies.
 	var actions []string
 	rows, _ := admin2(t, ctx, e2eURL).Query(ctx, `select action from audit_events order by seq`)
@@ -252,7 +378,8 @@ func TestServiceEndToEnd(t *testing.T) {
 		_ = rows.Scan(&a)
 		actions = append(actions, a)
 	}
-	for _, want := range []string{"funds.viewed", "instruction.created", "instruction.verified", "instruction.revealed", "ledger.recorded"} {
+	for _, want := range []string{"funds.viewed", "instruction.created", "instruction.verified", "instruction.revealed", "ledger.recorded",
+		"bank.link_started", "bank.connected", "bank.funds_checked", "bank.status_changed", "bank.disconnected"} {
 		if !slices.Contains(actions, want) {
 			t.Fatalf("audit missing %s: %v", want, actions)
 		}
@@ -270,7 +397,8 @@ func TestServiceEndToEnd(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("service did not shut down")
 	}
-	if strings.Contains(logs.String(), "a8db1096") || strings.Contains(logs.String(), e2eURL) {
+	if strings.Contains(logs.String(), "a8db1096") || strings.Contains(logs.String(), e2eURL) ||
+		strings.Contains(logs.String(), "access-sandbox") || strings.Contains(logs.String(), "link-sandbox") || strings.Contains(logs.String(), plaidtest.Secret) {
 		t.Fatal("logs must not contain transaction ids or the database url")
 	}
 }

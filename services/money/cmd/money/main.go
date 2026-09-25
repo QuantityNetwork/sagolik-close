@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,6 +23,8 @@ import (
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/httpapi"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/keys"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/mtls"
+	"github.com/quantitynetwork/sagolik-close/services/money/internal/plaid"
+	"github.com/quantitynetwork/sagolik-close/services/money/internal/redact"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/store"
 )
 
@@ -36,7 +39,7 @@ func main() {
 }
 
 // listening reports bound addresses (used by tests).
-type listening struct{ API, Health string }
+type listening struct{ API, Health, Webhook string }
 
 func run(ctx context.Context, getenv func(string) string, log *slog.Logger, ready chan<- listening) error {
 	cfg, err := config.Load(getenv)
@@ -64,12 +67,17 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 		log.Info("migrations", "applied", applied)
 	}
 
+	bank, err := bankConfig(cfg, getenv)
+	if err != nil {
+		return err
+	}
 	srv := &httpapi.Server{
 		Verifier:   &assertion.Verifier{Keys: jwks, Issuer: cfg.AssertionIssuer, Audience: cfg.AssertionAudience, Replay: st.ReplayGuard()},
 		Store:      st,
 		Sealer:     keys.NewEnvelope(provider),
 		Log:        log,
 		CoolingOff: cfg.CoolingOff,
+		Bank:       bank,
 	}
 
 	var tlsCfg *tls.Config
@@ -96,7 +104,20 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 		_ = apiLn.Close()
 		return err
 	}
-	errc := make(chan error, 2)
+	var hooks *http.Server
+	var hooksLn net.Listener
+	if cfg.WebhookAddr != "" {
+		// Provider webhooks: no client certificates, so every request is signature-checked.
+		// Put this listener behind the WAF/load balancer that terminates TLS.
+		hooks = &http.Server{Handler: srv.WebhookHandler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second,
+			WriteTimeout: 15 * time.Second, MaxHeaderBytes: 16 << 10, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelWarn)}
+		if hooksLn, err = net.Listen("tcp", cfg.WebhookAddr); err != nil {
+			_ = apiLn.Close()
+			_ = healthLn.Close()
+			return err
+		}
+	}
+	errc := make(chan error, 3)
 	go func() {
 		if tlsCfg != nil {
 			errc <- api.ServeTLS(apiLn, "", "")
@@ -105,11 +126,16 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 		}
 	}()
 	go func() { errc <- health.Serve(healthLn) }()
+	webhookAddr := ""
+	if hooks != nil {
+		webhookAddr = hooksLn.Addr().String()
+		go func() { errc <- hooks.Serve(hooksLn) }()
+	}
 	go pruneLoop(ctx, st, log)
 
-	log.Info("money service started", "env", cfg.Env, "api", apiLn.Addr().String(), "health", healthLn.Addr().String(), "key_provider", provider.Name(), "mtls", tlsCfg != nil)
+	log.Info("money service started", "env", cfg.Env, "api", apiLn.Addr().String(), "health", healthLn.Addr().String(), "key_provider", provider.Name(), "mtls", tlsCfg != nil, "plaid", cfg.PlaidEnv, "webhooks", webhookAddr)
 	if ready != nil {
-		ready <- listening{API: apiLn.Addr().String(), Health: healthLn.Addr().String()}
+		ready <- listening{API: apiLn.Addr().String(), Health: healthLn.Addr().String(), Webhook: webhookAddr}
 	}
 
 	select {
@@ -122,9 +148,42 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
 	_ = health.Shutdown(shutdownCtx)
+	if hooks != nil {
+		_ = hooks.Shutdown(shutdownCtx)
+	}
 	err = api.Shutdown(shutdownCtx)
 	log.Info("money service stopped")
 	return err
+}
+
+// bankConfig builds the Plaid client. MONEY_PLAID_BASE_URL (local only) points it at a test double.
+func bankConfig(cfg config.Config, getenv func(string) string) (httpapi.BankConfig, error) {
+	if cfg.PlaidEnv == "off" {
+		return httpapi.BankConfig{}, nil
+	}
+	secret := cfg.PlaidSecret
+	if cfg.PlaidSecretFile != "" {
+		b, err := os.ReadFile(cfg.PlaidSecretFile)
+		if err != nil {
+			return httpapi.BankConfig{}, fmt.Errorf("plaid secret file: %w", err)
+		}
+		secret = redact.NewSecret(strings.TrimSpace(string(b)))
+		redact.Wipe(b)
+	}
+	client, err := plaid.New(cfg.PlaidEnv, cfg.PlaidClientID, secret)
+	if err != nil {
+		return httpapi.BankConfig{}, err
+	}
+	if base := getenv("MONEY_PLAID_BASE_URL"); base != "" {
+		if cfg.Env != "local" {
+			return httpapi.BankConfig{}, errors.New("MONEY_PLAID_BASE_URL is only allowed when MONEY_ENV=local")
+		}
+		client.BaseURL = base
+	}
+	return httpapi.BankConfig{
+		Plaid: client, Environment: cfg.PlaidEnv, RedirectURI: cfg.PlaidRedirectURI, WebhookURL: cfg.PlaidWebhookURL,
+		Webhooks: &plaid.WebhookVerifier{Keys: client},
+	}, nil
 }
 
 func keyProvider(ctx context.Context, cfg config.Config) (keys.Provider, error) {

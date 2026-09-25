@@ -70,6 +70,9 @@ type fakeStore struct {
 }
 
 func (f *fakeStore) Ping(context.Context) error { return f.pingErr }
+func (f *fakeStore) ProofOfFundsFor(context.Context, string) ([]store.ProofOfFunds, error) {
+	return []store.ProofOfFunds{}, nil
+}
 func (f *fakeStore) FundsSummary(context.Context, string) ([]store.Summary, error) {
 	return []store.Summary{{Currency: "USD", Expected: 20_000_000, Outstanding: 5_000_000, Received: 15_000_000}}, nil
 }
