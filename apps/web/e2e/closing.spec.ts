@@ -78,3 +78,12 @@ test("escrow officer records funds received from their escrow system", async ({ 
   await expect(page.getByText("Funds received recorded.")).toBeVisible();
   await expect(page.getByText("Funds received (recorded by escrow)")).toBeVisible();
 });
+
+test("business buyer sees the acquisition with deal milestones", async ({ page }) => {
+  await signInAs(page, "amara.okafor");
+  await page.goto("/app");
+  await expect(page.getByRole("heading", { level: 1, name: "Blue Harbor Coffee" })).toBeVisible();
+  await expect(page.getByText("LOI signed").first()).toBeVisible();
+  await page.getByRole("link", { name: "View all" }).first().click();
+  await expect(page.getByText("Business acquisition (beta)").first()).toBeVisible();
+});

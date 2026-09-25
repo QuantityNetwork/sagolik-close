@@ -40,3 +40,11 @@ test("pages run their scripts under the nonce-based CSP", async ({ page }) => {
   }
   expect(violations).toEqual([]);
 });
+
+test("business beta page is labelled as a beta and marks its illustration", async ({ page }) => {
+  await page.goto("/business");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByText("Beta", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Illustration with fictional demo data.").first()).toBeVisible();
+  await expect(page.locator('a[href="/business"]').first()).toBeAttached();
+});

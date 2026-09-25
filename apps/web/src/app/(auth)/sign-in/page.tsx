@@ -1,5 +1,5 @@
 import { safeRedirectPath } from "@sagolik/security";
-import { DEMO_PERSONAS, DEMO_PASSWORD, getRuntime } from "@sagolik/core";
+import { BUSINESS_PERSONA_KEYS, DEMO_PERSONAS, DEMO_PASSWORD, getRuntime } from "@sagolik/core";
 import { Alert, Card, CardBody, Field, Input, ParticipantAvatar } from "@sagolik/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -135,8 +135,14 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
                   Explore as…
                 </h2>
                 <p className="mt-1 text-sm text-ink-3">Fictional people on fictional transactions. Nothing is sent or moved.</p>
-                <ul className="mt-5 grid gap-2 sm:grid-cols-2">
-                  {DEMO_PERSONAS.map((p) => (
+                {[
+                  { key: "home", label: "Home closing", people: DEMO_PERSONAS.filter((p) => !BUSINESS_PERSONA_KEYS.includes(p.key)) },
+                  { key: "business", label: "Business acquisition (beta)", people: DEMO_PERSONAS.filter((p) => BUSINESS_PERSONA_KEYS.includes(p.key)) },
+                ].map((group) => (
+                  <div key={group.key} className="mt-5">
+                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-3">{group.label}</p>
+                    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {group.people.map((p) => (
                     <li key={p.key}>
                       <ActionForm action={demoSignIn}>
                         <input type="hidden" name="persona" value={p.key} />
@@ -156,7 +162,9 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
                       </ActionForm>
                     </li>
                   ))}
-                </ul>
+                    </ul>
+                  </div>
+                ))}
               </CardBody>
             </Card>
           </section>

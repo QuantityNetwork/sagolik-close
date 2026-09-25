@@ -1,8 +1,11 @@
-import { ROLE_LABELS, STATE_LABELS } from "@sagolik/core";
+import { roleLabel, STATE_LABELS } from "@sagolik/core";
 import { formatDate } from "@sagolik/i18n";
 import { HEALTH_LABEL, healthTone, Card, CardBody, CardHeader, DefinitionList, Field, Input, Select, StatusBadge, Textarea, Timeline, formatMoney } from "@sagolik/ui";
-import { checkTransition, TRANSITIONS } from "@sagolik/workflow";
+import { checkTransition, DEAL_STRUCTURE_LABELS, TRANSITIONS } from "@sagolik/workflow";
+
+const ENTITY_LABEL = { llc: "LLC", c_corporation: "C corporation", s_corporation: "S corporation", partnership: "Partnership", sole_proprietorship: "Sole proprietorship" } as const;
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
+import type { ParticipantRole } from "@sagolik/types";
 import type { Metadata } from "next";
 import { transitionAction, updateClosingDateAction } from "@/app/actions/transaction";
 import { Assistant } from "@/components/app/assistant";
@@ -46,7 +49,7 @@ export default async function TransactionOverview({ params }: { params: Promise<
                 meta: (
                   <span className="flex flex-wrap items-center gap-2">
                     {!m.complete ? <StatusBadge tone={healthTone(m.health)}>{HEALTH_LABEL[m.health]}</StatusBadge> : null}
-                    {m.owner ? <span>{m.owner.displayName}</span> : m.ownerRole ? <span>{ROLE_LABELS[m.ownerRole as keyof typeof ROLE_LABELS]}</span> : null}
+                    {m.owner ? <span>{m.owner.displayName}</span> : m.ownerRole ? <span>{roleLabel(m.ownerRole as ParticipantRole, s.transaction.jurisdiction)}</span> : null}
                     {m.dueDate && !m.complete ? <span className={m.overdue ? "font-medium text-attention" : ""}>Due {formatDate(m.dueDate, locale)}</span> : null}
                   </span>
                 ),
@@ -91,6 +94,27 @@ export default async function TransactionOverview({ params }: { params: Promise<
           </CardBody>
         </Card>
 
+        {s.company ? (
+          <Card>
+            <CardHeader title="Company" description="Figures are as reported by the seller until due diligence confirms them." />
+            <CardBody>
+              <DefinitionList
+                items={[
+                  { term: "Legal name", value: s.company.legalName },
+                  { term: "Entity", value: `${ENTITY_LABEL[s.company.entityType]} · ${s.company.stateOfFormation}` },
+                  { term: "Deal structure", value: DEAL_STRUCTURE_LABELS[s.company.dealStructure] ?? s.company.dealStructure },
+                  { term: "Industry", value: s.company.industry },
+                  ...(s.company.employeeCount !== null ? [{ term: "Employees", value: s.company.employeeCount }] : []),
+                  ...(can("financial.view") && s.company.annualRevenue !== null ? [{ term: "Annual revenue (seller-reported)", value: formatMoney(s.company.annualRevenue, cur) }] : []),
+                  { term: "Premises", value: [s.property.addressLine1, s.property.city, s.property.region].filter(Boolean).join(", ") },
+                  ...(can("financial.view") ? [{ term: "Price", value: formatMoney(s.transaction.salePrice, cur) }] : []),
+                  { term: "Workflow", value: "US business acquisition (beta)" },
+                  { term: "Reference", value: s.transaction.reference },
+                ]}
+              />
+            </CardBody>
+          </Card>
+        ) : (
         <Card>
           <CardHeader title="Property" />
           <CardBody>
@@ -108,6 +132,7 @@ export default async function TransactionOverview({ params }: { params: Promise<
             />
           </CardBody>
         </Card>
+        )}
 
         {can("transaction.edit") ? (
           <Card>

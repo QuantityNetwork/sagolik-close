@@ -20,7 +20,7 @@ import { audit } from "../events";
 import { accessContext, loadAuthorized } from "../snapshot";
 import { today } from "../util";
 import { visibleDocuments } from "./documents";
-import { ROLE_LABELS, STATE_LABELS } from "./views";
+import { roleLabel, STATE_LABELS } from "./views";
 
 export const ASSISTANT_TOOLS = {
   read_status: { description: "Current stage, progress and timeline", permission: "transaction.view" },
@@ -100,7 +100,7 @@ export async function askAssistant(ctx: ServiceContext, transactionId: string, q
         return answer({ answer: "Nothing is blocking your closing — every requirement is met.", bullets: [], sources: [{ label: "Timeline", href: base }] });
       return answer({
         answer: `${blockers.length === 1 ? "One item remains" : `${blockers.length} items remain`} before closing${phase ? `. You're currently at “${phase.label}”` : ""}:`,
-        bullets: blockers.map((b) => `${b.detail}${b.responsible ? ` (${b.responsible.displayName}, ${ROLE_LABELS[b.responsible.role]})` : b.responsibleRole ? ` (${b.responsibleRole.replace(/_/g, " ")})` : ""}`),
+        bullets: blockers.map((b) => `${b.detail}${b.responsible ? ` (${b.responsible.displayName}, ${roleLabel(b.responsible.role, s.transaction.jurisdiction)})` : b.responsibleRole ? ` (${b.responsibleRole.replace(/_/g, " ")})` : ""}`),
         sources: [
           { label: "View timeline", href: base },
           ...(blockers.some((b) => /lender|loan/i.test(b.detail)) ? [{ label: "View lender status", href: `${base}/mortgage` }] : []),
@@ -169,7 +169,7 @@ export async function askAssistant(ctx: ServiceContext, transactionId: string, q
     case "people":
       return answer({
         answer: "These are the people on your transaction:",
-        bullets: s.participants.filter((p) => p.status !== "removed").map((p) => `${ROLE_LABELS[p.role]}: ${p.displayName}`),
+        bullets: s.participants.filter((p) => p.status !== "removed").map((p) => `${roleLabel(p.role, s.transaction.jurisdiction)}: ${p.displayName}`),
         sources: [{ label: "View people", href: `${base}/people` }],
       });
 

@@ -3,15 +3,17 @@ import { ArrowRight, Menu } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "../brand";
 
-const NAV = [
+// `wide` items only show in the top bar from 2xl up (they stay in the menu below that).
+const NAV: Array<{ href: string; label: string; badge?: string; wide?: boolean }> = [
   { href: "/#platform", label: "Platform" },
   { href: "/#how-it-works", label: "How It Works" },
   { href: "/#buyers", label: "Buyers" },
-  { href: "/#sellers", label: "Sellers" },
+  { href: "/#sellers", label: "Sellers", wide: true },
   { href: "/#professionals", label: "Professionals" },
+  { href: "/business", label: "Business", badge: "Beta" },
   { href: "/#security", label: "Security" },
-  { href: "/#pricing", label: "Pricing" },
-  { href: "/#resources", label: "Resources" },
+  { href: "/#pricing", label: "Pricing", wide: true },
+  { href: "/#resources", label: "Resources", wide: true },
 ];
 
 export function SiteHeader() {
@@ -19,10 +21,11 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-line/70 bg-canvas/90 backdrop-blur supports-[backdrop-filter]:bg-canvas/75">
       <div className="container-page flex h-[72px] items-center justify-between gap-6">
         <Logo className="h-8 w-auto sm:h-9" />
-        <nav aria-label="Main" className="hidden items-center gap-5 xl:flex">
+        <nav aria-label="Main" className="hidden items-center gap-4 xl:flex 2xl:gap-5">
           {NAV.map((n) => (
-            <Link key={n.href} href={n.href} className="whitespace-nowrap text-[13.5px] text-ink-2 transition-colors hover:text-navy-800">
+            <Link key={n.href} href={n.href} className={`${n.wide ? "hidden 2xl:inline " : ""}whitespace-nowrap text-[13.5px] text-ink-2 transition-colors hover:text-navy-800`}>
               {n.label}
+              {n.badge ? <span className="ml-1 rounded-full bg-teal-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-teal-700">{n.badge}</span> : null}
             </Link>
           ))}
         </nav>

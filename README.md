@@ -18,7 +18,11 @@ With no Supabase configuration, the app starts in **demo mode**:
 - Every provider (bank, identity, signatures, payments, escrow, email, SMS) is a sandbox adapter. Each one signs its webhooks, and those webhooks go through the real webhook pipeline.
 - A banner on every page says it is a demo.
 
-Sign in at `/sign-in` and pick a persona. For example, **Olivia Carter** (buyer), **Jessica Morgan** (buyer's agent, with the command center), **Marcus Lee** (escrow officer) or **Platform admin**.
+Sign in at `/sign-in` and pick a persona. For example, **Olivia Carter** (buyer), **Jessica Morgan** (buyer's agent, with the command center), **Marcus Lee** (escrow officer) or **Platform admin**. For the business-acquisition beta, pick **Amara Okafor** (buyer of the fictional Blue Harbor Coffee Roasters).
+
+## Business acquisitions (beta)
+
+The same closing workflow can run a purchase of a company (US asset or equity deals). It has its own vocabulary, milestones (LOI signed → ownership transferred), documents (LOI, diligence report, disclosure schedules, lien search, funds-flow memo) and roles (M&A advisor, counsel, accountant). The rules match real estate: funds stay with a licensed escrow agent, and ownership is marked transferred only when counsel confirms the closing filings. See [docs/business-beta.md](docs/business-beta.md) and the public page at `/business`.
 
 Sensitive actions (signing closing documents, payments, bank instructions) ask you to confirm it's you. In demo mode everyone shares a sandbox authenticator, and the step-up page shows its current code.
 
@@ -101,4 +105,5 @@ docs/             Architecture, data model, security, threat model, integrations
 | Banking (Plaid), email (Resend), SMS (Twilio) | Adapters written against the providers' documented APIs; not yet run against live accounts |
 | Identity (e.g. Persona), e-signature (e.g. DocuSign), payments and escrow partner | Interfaces and sandbox adapters are implemented. Production adapters are **not yet written**, and production start-up refuses to run on sandbox adapters. |
 | Property data, mortgage, title, insurance | Manual adapters, where professionals enter the data |
+| Business acquisitions | **Beta.** Workflow, data model, RLS, demo deal and web app are implemented and tested. No customers use it yet. |
 | Legal pages | Drafts; they need counsel review |

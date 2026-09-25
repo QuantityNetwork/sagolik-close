@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 import { Logo } from "../brand";
 import { HeroMockup } from "./hero-mockup";
 
-function SectionHeading({ eyebrow, title, children, align = "left", id }: { eyebrow?: string; title: ReactNode; children?: ReactNode; align?: "left" | "center"; id?: string }) {
+export function SectionHeading({ eyebrow, title, children, align = "left", id }: { eyebrow?: string; title: ReactNode; children?: ReactNode; align?: "left" | "center"; id?: string }) {
   return (
     <div className={align === "center" ? "mx-auto max-w-2xl text-center" : "max-w-2xl"}>
       {eyebrow ? <p className="eyebrow mb-3 text-teal-700">{eyebrow}</p> : null}
@@ -753,7 +753,7 @@ export function FinalCta() {
 
 export function SiteFooter() {
   const cols = [
-    ["Platform", [["How it works", "/#how-it-works"], ["Features", "/#platform"], ["Security", "/#security"], ["Pricing", "/#pricing"]]],
+    ["Platform", [["How it works", "/#how-it-works"], ["Features", "/#platform"], ["Security", "/#security"], ["Pricing", "/#pricing"], ["Business acquisitions (beta)", "/business"]]],
     ["Get started", [["Sign in", "/sign-in"], ["Start closing", "/sign-in?intent=start"], ["Book a demo", "/contact"]]],
     ["Legal", [["Privacy", "/legal/privacy"], ["Terms", "/legal/terms"], ["Compliance boundaries", "/legal/compliance"]]],
   ] as const;

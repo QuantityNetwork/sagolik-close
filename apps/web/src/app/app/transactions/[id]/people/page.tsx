@@ -1,4 +1,4 @@
-import { IDENTITY_STATUS_TEXT, ROLE_LABELS } from "@sagolik/core";
+import { IDENTITY_STATUS_TEXT, roleLabel } from "@sagolik/core";
 import { PARTICIPANT_ROLES } from "@sagolik/types";
 import { getJurisdiction } from "@sagolik/workflow";
 import { Alert, Card, CardBody, CardHeader, Field, Input, ParticipantAvatar, Select, StatusBadge } from "@sagolik/ui";
@@ -26,7 +26,7 @@ export default async function PeoplePage({ params, searchParams }: { params: Pro
         ) : null}
         {missing.length ? (
           <Alert tone="attention" title={`Required in ${j.name}`}>
-            Still to invite: {missing.map((r) => ROLE_LABELS[r]).join(", ")}.
+            Still to invite: {missing.map((r) => roleLabel(r, s.transaction.jurisdiction)).join(", ")}.
           </Alert>
         ) : null}
         <Card>
@@ -76,7 +76,7 @@ export default async function PeoplePage({ params, searchParams }: { params: Pro
                 <Select id="role" name="role" defaultValue={missing[0] ?? "buyer"}>
                   {PARTICIPANT_ROLES.map((r) => (
                     <option key={r} value={r}>
-                      {ROLE_LABELS[r]}
+                      {roleLabel(r, s.transaction.jurisdiction)}
                     </option>
                   ))}
                 </Select>

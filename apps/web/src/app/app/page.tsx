@@ -1,7 +1,8 @@
-import { getRuntime, listTransactionsForActor, moneyView, ROLE_LABELS, transactionView } from "@sagolik/core";
+import { getRuntime, listTransactionsForActor, moneyView, roleLabel, transactionView } from "@sagolik/core";
 import { formatDate, greetingKey, translator } from "@sagolik/i18n";
 import { isPrincipal } from "@sagolik/auth";
-import { buttonClasses, Card, EmptyState, formatMoney, ParticipantAvatar } from "@sagolik/ui";
+import { buttonClasses, Card, EmptyState, formatMoney, IconTile, ParticipantAvatar } from "@sagolik/ui";
+import { dealSubject } from "@sagolik/workflow";
 import { ArrowRight, Check, Circle, CircleDot, FileText } from "lucide-react";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -57,11 +58,10 @@ export default async function HomePage() {
               <div className="p-6">
                 <p className="text-sm text-ink-3">{t(greetingKey(new Date().getHours()), { name: actor.displayName.split(" ")[0]! })}</p>
                 <h1 id="closing-title" className="mt-1 text-[32px] leading-tight text-navy-800">
-                  {s.property.addressLine1}
+                  {dealSubject(s).title}
                 </h1>
                 <p className="text-sm text-ink-3">
-                  {s.property.city}
-                  {s.property.region ? `, ${s.property.region}` : ""} · {s.transaction.expectedClosingDate ? t("home.closing", { date: formatDate(s.transaction.expectedClosingDate, locale) }) : "Closing date to be confirmed"}
+                  {dealSubject(s).kind === "company" ? dealSubject(s).subtitle : [s.property.city, s.property.region].filter(Boolean).join(", ")} · {s.transaction.expectedClosingDate ? t("home.closing", { date: formatDate(s.transaction.expectedClosingDate, locale) }) : "Closing date to be confirmed"}
                 </p>
                 <p className="mt-5 text-[17px] text-ink-2">{t("home.percentComplete", { percent: view.progress })}</p>
                 <div className="mt-3 h-2 w-full max-w-md overflow-hidden rounded-full bg-navy-100" role="progressbar" aria-valuenow={view.progress} aria-valuemin={0} aria-valuemax={100} aria-label="Closing progress">
@@ -71,6 +71,10 @@ export default async function HomePage() {
               {s.property.imageUrls[0] ? (
                 <div className="relative hidden sm:block">
                   <Image src={s.property.imageUrls[0]} alt={`Photo of ${s.property.addressLine1}`} fill sizes="200px" className="object-cover" />
+                </div>
+              ) : s.company ? (
+                <div className="hidden items-center justify-center bg-gradient-to-br from-navy-50 to-teal-50 sm:flex">
+                  <IconTile name="transactions" size="lg" />
                 </div>
               ) : null}
             </div>
@@ -171,7 +175,7 @@ export default async function HomePage() {
                       {p.participant.displayName}
                       {p.isMe ? <span className="text-ink-3"> (you)</span> : null}
                     </p>
-                    <p className="text-[12px] text-ink-3">{ROLE_LABELS[p.participant.role]}</p>
+                    <p className="text-[12px] text-ink-3">{roleLabel(p.participant.role, s.transaction.jurisdiction)}</p>
                   </div>
                 </li>
               ))}
@@ -197,9 +201,9 @@ export default async function HomePage() {
                   .map((i) => (
                     <li key={i.snapshot.transaction.id}>
                       <Link href={`/app/transactions/${i.snapshot.transaction.id}`} className="text-teal-700 hover:underline">
-                        {i.snapshot.property.addressLine1}
+                        {dealSubject(i.snapshot).title}
                       </Link>
-                      <span className="text-ink-3"> · {i.myRoles.map((r) => ROLE_LABELS[r]).join(", ")}</span>
+                      <span className="text-ink-3"> · {i.myRoles.map((r) => roleLabel(r, i.snapshot.transaction.jurisdiction)).join(", ")}</span>
                     </li>
                   ))}
               </ul>

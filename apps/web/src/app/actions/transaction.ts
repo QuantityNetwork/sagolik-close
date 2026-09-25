@@ -48,6 +48,20 @@ export async function createTransactionAction(_p: ActionState, fd: FormData): Pr
         country: formString(fd, "country") ?? "US",
         propertyType: formString(fd, "propertyType") ?? "single_family",
       },
+      ...(formString(fd, "type") === "business_acquisition"
+        ? {
+            company: {
+              legalName: formString(fd, "legalName") ?? "",
+              tradeName: formString(fd, "tradeName"),
+              entityType: (formString(fd, "entityType") ?? "llc") as "llc",
+              stateOfFormation: formString(fd, "stateOfFormation") ?? "",
+              industry: formString(fd, "industry") ?? "",
+              employeeCount: formString(fd, "employeeCount") ? Number(formString(fd, "employeeCount")) : undefined,
+              annualRevenue: parseMoneyInput(formString(fd, "annualRevenue")),
+              dealStructure: (formString(fd, "dealStructure") ?? "asset_purchase") as "asset_purchase",
+            },
+          }
+        : {}),
     });
     createdId = tx.id;
   });

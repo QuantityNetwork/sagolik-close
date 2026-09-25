@@ -7,7 +7,8 @@ import { addTitleIssueAction, orderTitleAction, resolveTitleIssueAction, updateT
 import { ActionButton, ActionForm, SubmitButton } from "@/components/forms";
 import { loadTx } from "@/lib/server/tx";
 
-export const metadata: Metadata = { title: "Title" };
+import { wording } from "@/lib/wording";
+export const metadata: Metadata = { title: "Title & liens" };
 
 const LABEL: Record<(typeof TITLE_STATUSES)[number], string> = { not_started: "Not started", searching: "Searching", issues_found: "Issues found", curing: "Resolving issues", clear: "Clear", insured: "Clear & insured" };
 const TONE = { not_started: "neutral", searching: "progress", issues_found: "blocked", curing: "attention", clear: "done", insured: "done" } as const;
@@ -17,26 +18,27 @@ export default async function TitlePage({ params }: { params: Promise<{ id: stri
   const { snapshot: s, can, locale } = await loadTx(id);
   const t = s.titleCase;
   const officer = can("title.update");
+  const w = wording(s.transaction.jurisdiction).title;
 
   if (!t) {
     return (
       <Card>
         {officer ? (
           <>
-            <CardHeader title="Order title" description="Start the title search and insurance commitment." />
+            <CardHeader title={w.orderTitle} description={w.orderDescription} />
             <CardBody>
               <ActionForm action={orderTitleAction} className="flex flex-wrap items-end gap-2">
                 <input type="hidden" name="transactionId" value={id} />
-                <Field label="Title company" htmlFor="titleCompany" className="min-w-64 flex-1">
+                <Field label={w.providerLabel} htmlFor="titleCompany" className="min-w-64 flex-1">
                   <Input id="titleCompany" name="titleCompany" required />
                 </Field>
-                <SubmitButton>Start title search</SubmitButton>
+                <SubmitButton>{w.start}</SubmitButton>
               </ActionForm>
             </CardBody>
           </>
         ) : (
-          <EmptyState title="Title hasn't been ordered yet" icon={<ScrollText className="h-8 w-8" aria-hidden />}>
-            Your title officer will start the search and show progress here.
+          <EmptyState title={w.empty} icon={<ScrollText className="h-8 w-8" aria-hidden />}>
+            {w.page === "Title" ? "Your title officer will start the search and show progress here." : "Deal counsel will order the search and show findings here."}
           </EmptyState>
         )}
       </Card>
@@ -51,7 +53,7 @@ export default async function TitlePage({ params }: { params: Promise<{ id: stri
           <CardBody>
             <DefinitionList
               items={[
-                ...(t.currentOwner ? [{ term: "Current owner of record", value: t.currentOwner }] : []),
+                ...(t.currentOwner ? [{ term: w.ownerLabel, value: t.currentOwner }] : []),
                 ...(t.searchCompletedAt ? [{ term: "Search completed", value: formatDate(t.searchCompletedAt, locale) }] : []),
                 ...(t.clearedAt ? [{ term: "Cleared", value: formatDate(t.clearedAt, locale) }] : []),
                 ...(t.insurancePolicyNumber ? [{ term: "Title insurance policy", value: t.insurancePolicyNumber }] : []),
@@ -61,7 +63,7 @@ export default async function TitlePage({ params }: { params: Promise<{ id: stri
           </CardBody>
         </Card>
         <Card>
-          <CardHeader title="Liens, judgments, easements and other issues" description="Title must be clear of unresolved issues before closing." />
+          <CardHeader title={w.issuesTitle} description={w.issuesDescription} />
           <CardBody>
             <ul className="space-y-3 text-sm">
               {s.titleIssues.map((i) => (

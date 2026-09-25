@@ -63,6 +63,9 @@ export const DEMO_PERSONAS: DemoPersona[] = [
   persona("admin", "Sagolik Operations (demo)", "Platform admin", "Internal Sagolik admin console. No implicit access to transaction data.", "/admin"),
 ];
 
+/** Personas on the fictional business acquisition (beta). */
+export const BUSINESS_PERSONA_KEYS: readonly string[] = ["amara.okafor", "tom.becker", "rachel.kim", "david.chen", "grace.liu"];
+
 const P = Object.fromEntries(DEMO_PERSONAS.map((p) => [p.key, p])) as Record<string, DemoPersona>;
 
 export const DEMO_TRANSACTION_ID = did("tx:maple");

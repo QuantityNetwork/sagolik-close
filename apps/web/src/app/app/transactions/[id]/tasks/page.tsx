@@ -1,4 +1,4 @@
-import { ROLE_LABELS } from "@sagolik/core";
+import { roleLabel } from "@sagolik/core";
 import { formatDate } from "@sagolik/i18n";
 import type { Task } from "@sagolik/types";
 import { Card, CardBody, CardHeader, EmptyState, Field, Input, Select, StatusBadge, Textarea } from "@sagolik/ui";
@@ -37,7 +37,7 @@ export default async function TasksPage({ params }: { params: Promise<{ id: stri
             <p className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
               <StatusBadge tone={PRIORITY_TONE[t.priority]}>{t.priority}</StatusBadge>
               <span>{STATUS_LABEL[t.status]}</span>
-              {who ? <span>· {isMine ? "You" : `${who.displayName} (${ROLE_LABELS[who.role]})`}</span> : null}
+              {who ? <span>· {isMine ? "You" : `${who.displayName} (${roleLabel(who.role, s.transaction.jurisdiction)})`}</span> : null}
               {t.dueDate ? <span>· Due {formatDate(t.dueDate, locale)}</span> : null}
               {t.milestoneKey ? <span>· {MILESTONE_LABELS[t.milestoneKey]}</span> : null}
             </p>
@@ -113,7 +113,7 @@ export default async function TasksPage({ params }: { params: Promise<{ id: stri
                     .filter((p) => p.status !== "removed")
                     .map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.displayName} — {ROLE_LABELS[p.role]}
+                        {p.displayName} — {roleLabel(p.role, s.transaction.jurisdiction)}
                       </option>
                     ))}
                 </Select>

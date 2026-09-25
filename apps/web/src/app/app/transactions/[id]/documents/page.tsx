@@ -1,6 +1,6 @@
-import { listDocuments, ROLE_LABELS, signatureStatusLabel } from "@sagolik/core";
+import { listDocuments, roleLabel, signatureStatusLabel } from "@sagolik/core";
 import { formatDate, formatDateTime } from "@sagolik/i18n";
-import { DOCUMENT_CATEGORIES, type SignatureStatus } from "@sagolik/types";
+import type { SignatureStatus } from "@sagolik/types";
 import { Alert, Card, CardBody, CardHeader, EmptyState, Field, Input, Select, StatusBadge, type Tone } from "@sagolik/ui";
 import { Download, FileText, Lock, PenLine, ShieldCheck } from "lucide-react";
 import type { Metadata } from "next";
@@ -8,6 +8,7 @@ import { requestSignaturesAction, reviewDocumentAction, startSigningAction, uplo
 import { ActionButton, ActionForm, SubmitButton } from "@/components/forms";
 import { loadTx } from "@/lib/server/tx";
 
+import { wording } from "@/lib/wording";
 export const metadata: Metadata = { title: "Documents" };
 
 const SIG_TONE: Record<SignatureStatus, Tone> = { not_required: "neutral", draft: "neutral", sent: "attention", viewed: "attention", signed: "attention", declined: "blocked", expired: "blocked", completed: "done" };
@@ -152,7 +153,7 @@ export default async function DocumentsPage({ params, searchParams }: { params: 
                         <div className="mt-1 grid gap-1">
                           {signers.map((p) => (
                             <label key={p.id} className="flex items-center gap-2 text-[13px] text-ink-2">
-                              <input type="checkbox" name="signers" value={p.id} className="accent-navy-800" /> {p.displayName} <span className="text-ink-3">({ROLE_LABELS[p.role]})</span>
+                              <input type="checkbox" name="signers" value={p.id} className="accent-navy-800" /> {p.displayName} <span className="text-ink-3">({roleLabel(p.role, s.transaction.jurisdiction)})</span>
                             </label>
                           ))}
                         </div>
@@ -197,7 +198,7 @@ export default async function DocumentsPage({ params, searchParams }: { params: 
               </Field>
               <Field label="Category" htmlFor="category">
                 <Select id="category" name="category" defaultValue="other">
-                  {DOCUMENT_CATEGORIES.map((c) => (
+                  {wording(s.transaction.jurisdiction).documentCategories.map((c) => (
                     <option key={c} value={c}>
                       {human(c)}
                     </option>

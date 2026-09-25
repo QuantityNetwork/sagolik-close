@@ -1,11 +1,12 @@
 import { formatDate } from "@sagolik/i18n";
-import { StatusBadge } from "@sagolik/ui";
+import { IconTile, StatusBadge } from "@sagolik/ui";
+import { dealSubject, getJurisdiction } from "@sagolik/workflow";
 import Image from "next/image";
 import Link from "next/link";
 import { TabNav } from "@/components/app/tabs";
 import { loadTx } from "@/lib/server/tx";
 
-const TYPE_LABEL = { purchase: "Purchase", sale: "Sale", refinance: "Refinance", ownership_transfer: "Ownership transfer", business_acquisition: "Business acquisition" } as const;
+const TYPE_LABEL = { purchase: "Purchase", sale: "Sale", refinance: "Refinance", ownership_transfer: "Ownership transfer", business_acquisition: "Business acquisition (beta)" } as const;
 const TONE = { neutral: "neutral", progress: "progress", attention: "attention", done: "done", stopped: "stopped" } as const;
 
 export default async function TransactionLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
@@ -13,6 +14,8 @@ export default async function TransactionLayout({ children, params }: { children
   const { snapshot: s, view, can, locale } = await loadTx(id);
   const base = `/app/transactions/${id}`;
   const openTasks = view.myTasks.length;
+  const subject = dealSubject(s);
+  const business = getJurisdiction(s.transaction.jurisdiction).vertical === "business";
   const complianceOpen = s.complianceCases.filter((c) => c.status === "review_required" || c.status === "escalated").length;
 
   const tabs = [
@@ -21,7 +24,7 @@ export default async function TransactionLayout({ children, params }: { children
     { href: `${base}/documents`, label: "Documents", count: view.documents.needsAttention, icon: "documents" as const },
     ...(can("financial.view") ? [{ href: `${base}/money`, label: "Money", icon: "payments" as const }] : []),
     ...(s.mortgage || can("mortgage.update") ? [{ href: `${base}/mortgage`, label: "Financing", icon: "financing" as const }] : []),
-    ...(s.titleCase || can("title.update") ? [{ href: `${base}/title`, label: "Title", icon: "title" as const }] : []),
+    ...(s.titleCase || can("title.update") ? [{ href: `${base}/title`, label: business ? "Lien search" : "Title", icon: "title" as const }] : []),
     { href: `${base}/people`, label: "People", icon: "people" as const },
     { href: `${base}/messages`, label: "Messages", icon: "messages" as const },
     { href: `${base}/calendar`, label: "Calendar", icon: "timeline" as const },
@@ -42,13 +45,15 @@ export default async function TransactionLayout({ children, params }: { children
           </nav>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-start gap-4">
-              {s.property.imageUrls[0] ? (
-                <Image src={s.property.imageUrls[0]} alt="" width={72} height={72} className="hidden h-[72px] w-[72px] rounded-lg object-cover sm:block" />
-              ) : null}
+              {subject.imageUrl ? (
+                <Image src={subject.imageUrl} alt="" width={72} height={72} className="hidden h-[72px] w-[72px] rounded-lg object-cover sm:block" />
+              ) : (
+                <IconTile name={business ? "transactions" : "overview"} size="md" className="hidden sm:inline-flex" />
+              )}
               <div>
-                <h1 className="text-[28px] leading-tight text-navy-800">{s.property.addressLine1}</h1>
+                <h1 className="text-[28px] leading-tight text-navy-800">{subject.title}</h1>
                 <p className="mt-0.5 text-sm text-ink-3">
-                  {[s.property.city, s.property.region, s.property.postalCode].filter(Boolean).join(", ")} · {TYPE_LABEL[s.transaction.type]} ·{" "}
+                  {subject.subtitle} · {TYPE_LABEL[s.transaction.type]} ·{" "}
                   {s.transaction.expectedClosingDate ? `Closing ${formatDate(s.transaction.expectedClosingDate, locale, { month: "long", day: "numeric", year: "numeric" })}` : "Closing date to be confirmed"}
                 </p>
               </div>

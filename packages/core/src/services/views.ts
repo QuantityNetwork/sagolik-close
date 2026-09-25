@@ -28,6 +28,7 @@ import {
   sortTasks,
   type TransactionSnapshot,
   dealSubject,
+  JURISDICTIONS,
 } from "@sagolik/workflow";
 import { type ServiceContext, requireUser } from "../context";
 import { accessContext } from "../snapshot";
@@ -73,6 +74,20 @@ export const ROLE_LABELS: Record<ParticipantRole, string> = {
   auditor: "Auditor",
   accountant: "Accountant",
 };
+
+const BUSINESS_ROLE_LABELS: Partial<Record<ParticipantRole, string>> = {
+  broker: "M&A advisor",
+  attorney: "Counsel",
+  loan_officer: "Lender",
+  escrow_officer: "Escrow agent",
+  transaction_coordinator: "Deal coordinator",
+};
+
+/** Role name as people in this kind of deal say it. */
+export function roleLabel(role: ParticipantRole, jurisdiction?: string): string {
+  const business = jurisdiction ? JURISDICTIONS[jurisdiction]?.vertical === "business" : false;
+  return (business ? BUSINESS_ROLE_LABELS[role] : undefined) ?? ROLE_LABELS[role];
+}
 
 export const PAYMENT_STATUS_TEXT: Record<PaymentStatus, string> = {
   created: "Being prepared.",
@@ -201,7 +216,7 @@ export function transactionView(ctx: ServiceContext, s: TransactionSnapshot): Tr
       .filter((p) => p.status !== "removed")
       .map((p) => ({
         participant: p,
-        roleLabel: ROLE_LABELS[p.role],
+        roleLabel: roleLabel(p.role, s.transaction.jurisdiction),
         identity: isPrincipal(p.role) ? (s.identityVerifications.filter((v) => v.participantId === p.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.status ?? "not_started") : null,
         isMe: mine.has(p.id),
       })),
