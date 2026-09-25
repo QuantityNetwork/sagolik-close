@@ -51,22 +51,24 @@ var (
 	currencyRe = regexp.MustCompile(`^[A-Z]{3}$`)
 	// ErrInsufficientHeld: a reported disbursement exceeds what escrow reported holding.
 	ErrInsufficientHeld = errors.New("store: disbursement exceeds funds reported held")
+	// ErrInvalidMovement: the movement failed validation.
+	ErrInvalidMovement = errors.New("store: invalid movement")
 )
 
 func (m Movement) validate() error {
 	switch {
 	case !uuidRe.MatchString(m.TransactionID):
-		return errors.New("store: transaction id must be a uuid")
+		return fmt.Errorf("%w: transaction id must be a uuid", ErrInvalidMovement)
 	case postings[m.Kind] == [2]string{}:
-		return fmt.Errorf("store: unknown movement kind %q", m.Kind)
+		return fmt.Errorf("%w: unknown movement kind %q", ErrInvalidMovement, m.Kind)
 	case m.Amount <= 0:
-		return errors.New("store: amount must be positive")
+		return fmt.Errorf("%w: amount must be positive", ErrInvalidMovement)
 	case !currencyRe.MatchString(m.Currency):
-		return errors.New("store: currency must be ISO 4217")
+		return fmt.Errorf("%w: currency must be ISO 4217", ErrInvalidMovement)
 	case m.Source == "" || m.RecordedBy == "":
-		return errors.New("store: source and recorded_by are required")
+		return fmt.Errorf("%w: source and recorded_by are required", ErrInvalidMovement)
 	case len(m.IdempotencyKey) < 8 || len(m.IdempotencyKey) > 200:
-		return errors.New("store: idempotency key must be 8-200 characters")
+		return fmt.Errorf("%w: idempotency key must be 8-200 characters", ErrInvalidMovement)
 	}
 	return nil
 }
@@ -120,7 +122,8 @@ func (s *Store) RecordMovement(ctx context.Context, m Movement) (groupID string,
 			return err
 		}
 		created = true
-		return nil
+		return s.appendAuditInTx(ctx, tx, AuditEvent{Actor: m.RecordedBy, Action: "ledger.recorded", Subject: "transaction:" + m.TransactionID,
+			Details: map[string]any{"group": groupID, "kind": m.Kind, "amount": m.Amount, "currency": m.Currency, "source": m.Source}})
 	})
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" { // concurrent insert of the same key

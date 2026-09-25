@@ -1,6 +1,6 @@
 # Money service (Go) — design
 
-Status: **M1 (foundation) implemented** in `services/money` — see its README. M2 onwards not started. Decisions this design rests on: **US first**, and Sagolik Close stays **an orchestration layer only**. It never holds, receives or moves client funds.
+Status: **M1 and M2 implemented** in `services/money` (see its README). M3 onwards not started. Decisions this design rests on: **US first**, and Sagolik Close stays **an orchestration layer only**. It never holds, receives or moves client funds.
 
 ## 1. What "orchestration only" means for money in the US
 
@@ -140,7 +140,7 @@ The rules already exist in `packages/core/src/services/{banking,payments,escrow}
    - the Go service, OpenAPI spec, database, KMS envelope encryption, mTLS and user assertions
    - health endpoints and CI gates
    - local development with LocalStack KMS
-2. **M2 — Instructions and ledger:**
+2. **M2 — Instructions and ledger** ✅ done:
    - port instruction versioning, cooling-off, dual control and the ledger
    - a TypeScript adapter (`MoneyServiceClient`) replaces the in-process calls when `MONEY_SERVICE_URL` is set
    - the lifecycle tests run against both implementations
@@ -148,6 +148,18 @@ The rules already exist in `packages/core/src/services/{banking,payments,escrow}
 4. **M4 — First escrow partner: Fidelity National Financial (FNF).** FNF is the largest US title insurer (brands include Fidelity National Title and Chicago Title) and owns SoftPro, a title production system also widely used by independent agents. Integrate with SoftPro through its partner program, to verify beneficiaries and confirm receipt and disbursement (F1, F3). This needs a signed partnership: the APIs are partner-gated. FNF also runs its own consumer closing app (inHere), so position Sagolik Close as the multi-party layer that works *with* their systems, not a replacement for them.
 5. **M5 — Hardening:** penetration test, SOC 2 Type I readiness, runbooks, and delete the TypeScript money code.
 6. **Later, only with counsel sign-off:** F2 escrow-initiated ACH/RTP.
+
+## 9a. What M2 delivered
+
+- **Payment instructions in Go.** Versions are immutable and sealed, and status comes from append-only events. A change is high risk (critical within 72 hours of closing) and gets a configurable cooling-off period (`MONEY_COOLING_OFF_HOURS`, default 24). Verification must come from a second person, the author is refused, and a call reference is recorded. Step-up is required for every write.
+- **Full wire details for the payer (F1).** Only for current, verified instructions past cooling-off, after a fresh step-up, and every reveal is audited. The web app shows them on request and hides them again after two minutes.
+- **Escrow-reported movements.** The escrow officer records what their escrow system shows (received, paid out). Recording is idempotent per reference and posted to the double-entry ledger. A payout larger than the funds reported held is refused.
+- **Web app integration.** When `MONEY_SERVICE_URL` is set, `@sagolik/core` calls the service for these actions and keeps masked mirror rows only (the account number is replaced by `held-by-money-service`). Escrow-initiated payments (F2) are unavailable in this mode, as §1 requires.
+- **Tests.** The same F1 scenario runs in-process and against the real Go binary over mTLS (`services/money/scripts/integration.sh`, CI job `money-integration`).
+
+**Deferred:**
+- *Dual approval of payment intents.* It moves with F2 (escrow-initiated payments), after counsel sign-off.
+- *Mirror resync.* The money service is written first and the web app mirror second. If the mirror write fails, the service stays correct and the mirror can be rebuilt from `GET /v1/transactions/{id}/instructions`. That repair job is part of M5.
 
 ## 10. Decisions
 

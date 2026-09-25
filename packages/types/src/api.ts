@@ -29,6 +29,7 @@ export const ERROR_CODES = [
   "rate_limited",
   "idempotency_conflict",
   "provider_error",
+  "unavailable",
   "internal",
 ] as const;
 export const ErrorCode = z.enum(ERROR_CODES);

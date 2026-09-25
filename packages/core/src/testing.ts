@@ -24,7 +24,7 @@ export interface TestHarness {
   userId(personaKey: string): string;
 }
 
-export async function createTestHarness(opts: { seed?: boolean; flags?: ServiceContext["flags"] } = {}): Promise<TestHarness> {
+export async function createTestHarness(opts: { seed?: boolean; flags?: ServiceContext["flags"]; money?: ServiceContext["money"] } = {}): Promise<TestHarness> {
   const env = parseEnv({ APP_ENV: "local", APP_URL: "http://localhost:3000", DEMO_MODE: "true" });
   const keyRing = parseKeyRing(LOCAL_ENCRYPTION_KEYS);
   const providers = createProviders(env);
@@ -54,6 +54,7 @@ export async function createTestHarness(opts: { seed?: boolean; flags?: ServiceC
     log: quietLog,
     now: () => new Date(),
     outboxMode: "inline",
+    money: opts.money ?? null,
   });
 
   setMockWebhookSink(async (providerId, rawBody, signature) => {

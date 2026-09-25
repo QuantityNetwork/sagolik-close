@@ -24,3 +24,5 @@ export * from "./services/views";
 export * from "./services/assistant";
 export * from "./services/governance";
 export * from "./services/account";
+export * from "./money/client";
+export * from "./money/bridge";

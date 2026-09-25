@@ -1,0 +1,29 @@
+{
+  "financial.view": [
+    "buyer",
+    "co_buyer",
+    "seller",
+    "co_seller",
+    "loan_officer",
+    "mortgage_processor",
+    "title_officer",
+    "escrow_officer",
+    "attorney",
+    "transaction_coordinator",
+    "auditor"
+  ],
+  "beneficiary.modify": [
+    "escrow_officer"
+  ],
+  "beneficiary.verify": [
+    "title_officer",
+    "escrow_officer"
+  ],
+  "payment.initiate": [
+    "buyer",
+    "co_buyer"
+  ],
+  "escrow.manage": [
+    "escrow_officer"
+  ]
+}

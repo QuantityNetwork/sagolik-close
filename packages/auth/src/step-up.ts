@@ -7,6 +7,8 @@ import type { Actor } from "./authorize";
 export const STEP_UP_ACTIONS = [
   "bank_instruction.change",
   "bank_instruction.verify",
+  "bank_instruction.reveal",
+  "escrow.record_movement",
   "payment.initiate",
   "payment.approve",
   "beneficiary.add",

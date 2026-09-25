@@ -11,6 +11,8 @@ import { accessContext, loadAuthorized } from "../snapshot";
 import { newId, nowIso } from "../util";
 import { reconcile } from "./engine";
 import { postSystemMessage } from "./messaging";
+import { moneyCaller, viaMoney } from "../money/bridge";
+import { emit } from "../events";
 import { createBankInstruction } from "./payments";
 
 const OpenEscrowInput = z.object({ requiredAmount: z.number().int().positive(), expectedReleaseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() });
@@ -53,6 +55,17 @@ export async function openEscrow(ctx: ServiceContext, transactionId: string, raw
     },
     { providerAttested: true },
   );
+  if (ctx.money) {
+    await viaMoney(() =>
+      ctx.money!.recordMovement(moneyCaller(ctx, s, "escrow.manage"), {
+        kind: "expectation",
+        amount: input.requiredAmount,
+        currency: s.transaction.currency,
+        reference: `Escrow ${opened.externalReference}`,
+        idempotencyKey: `escrow:${transactionId}:expectation:opened`,
+      }),
+    );
+  }
   await audit(ctx, { action: "escrow.opened", resourceType: "escrow_account", resourceId: escrow.id, transactionId, organizationId: s.transaction.organizationId, metadata: { provider: escrow.provider, reference: escrow.externalReference, requiredAmount: escrow.requiredAmount, openedBy: actor.userId } });
   await postSystemMessage(ctx, transactionId, `Escrow opened with ${opened.providerName} (ref ${opened.externalReference}).`, { type: "escrow_account", id: escrow.id });
   await reconcile(ctx, transactionId);
@@ -125,4 +138,77 @@ export async function handleEscrowEvent(ctx: ServiceContext, eventType: string, 
   await audit(ctx, { action: "escrow.disbursed", resourceType: "escrow_account", resourceId: escrow.id, transactionId: escrow.transactionId, organizationId: tx?.organizationId ?? null, metadata: { stage: "confirmed" } });
   await postSystemMessage(ctx, escrow.transactionId, `${escrow.providerName} confirmed that all funds have been disbursed.`, { type: "escrow_account", id: escrow.id });
   await reconcile(ctx, escrow.transactionId);
+}
+
+const MovementInput = z.object({
+  kind: z.enum(["receipt", "disbursement"]),
+  amount: z.number().int().positive(),
+  reference: z.string().trim().regex(/^[\p{L}\p{N} .,:#/_-]{3,120}$/u, "Add the reference from your escrow system."),
+});
+
+/**
+ * The escrow officer records what their escrow system shows — funds received
+ * from the buyer's bank, or paid out. Sagolik never moves these funds; this is
+ * how F1 (buyer wires from their own bank) is reflected. Same reference twice
+ * is treated as the same entry.
+ */
+export async function recordEscrowMovement(ctx: ServiceContext, transactionId: string, raw: unknown) {
+  const actor = requireUser(ctx);
+  const input = MovementInput.parse(raw);
+  const s = await loadAuthorized(ctx, transactionId, "escrow.manage");
+  assertStepUp(actor, "escrow.record_movement", ctx.now().getTime());
+  if (!s.escrow) throw badRequest("Open escrow before recording funds.");
+  const escrow = s.escrow;
+  const externalReference = `${input.kind}:${input.reference}`;
+  if (await ctx.writer.escrow_transactions.findOne({ escrowAccountId: escrow.id, externalReference })) {
+    return escrow; // already recorded
+  }
+  if (input.kind === "disbursement" && input.amount > escrow.receivedAmount) {
+    throw conflict("That payout is larger than the funds escrow has reported holding.");
+  }
+  if (ctx.money) {
+    await viaMoney(() =>
+      ctx.money!.recordMovement(moneyCaller(ctx, s, "escrow.manage"), {
+        kind: input.kind,
+        amount: input.amount,
+        currency: escrow.currency,
+        reference: input.reference,
+        idempotencyKey: `escrow:${transactionId}:${externalReference}`.slice(0, 200),
+      }),
+    );
+  }
+  const now = nowIso(ctx);
+  await ctx.writer.escrow_transactions.insert({
+    id: newId(),
+    escrowAccountId: escrow.id,
+    transactionId,
+    direction: input.kind === "receipt" ? "deposit" : "disbursement",
+    amount: input.amount,
+    currency: escrow.currency,
+    status: "settled",
+    paymentId: null,
+    description: input.kind === "receipt" ? "Funds received (recorded by escrow)" : "Funds paid out (recorded by escrow)",
+    externalReference,
+    occurredAt: now,
+    createdAt: now,
+  });
+  const received = input.kind === "receipt" ? escrow.receivedAmount + input.amount : escrow.receivedAmount - input.amount;
+  const updated = await ctx.writer.escrow_accounts.update(escrow.id, {
+    receivedAmount: received,
+    status: input.kind === "disbursement" ? escrow.status : received >= escrow.requiredAmount ? "funded" : "awaiting_deposit",
+  });
+  await audit(ctx, {
+    action: "escrow.movement_recorded",
+    resourceType: "escrow_account",
+    resourceId: escrow.id,
+    transactionId,
+    organizationId: s.transaction.organizationId,
+    metadata: { kind: input.kind, amount: input.amount, currency: escrow.currency, reference: input.reference },
+  });
+  if (input.kind === "receipt") {
+    await emit(ctx, { type: "escrow.deposit_received", aggregateType: "escrow_account", aggregateId: escrow.id, transactionId, payload: { amount: input.amount }, idempotencyKey: `escrow.deposit_received:${escrow.id}:${input.reference}` });
+    await postSystemMessage(ctx, transactionId, `Escrow recorded funds received (ref ${input.reference}).`, { type: "escrow_account", id: escrow.id });
+  }
+  await reconcile(ctx, transactionId);
+  return updated;
 }

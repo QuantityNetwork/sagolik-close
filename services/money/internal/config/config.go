@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/redact"
 )
@@ -33,6 +35,9 @@ type Config struct {
 	AssertionJWKSFile string
 	AssertionIssuer   string
 	AssertionAudience string
+
+	// CoolingOff is the waiting period before changed payment instructions can be used.
+	CoolingOff time.Duration
 }
 
 // Load parses configuration using getenv (os.Getenv in production).
@@ -61,6 +66,11 @@ func Load(getenv func(string) string) (Config, error) {
 		AssertionIssuer:            get("MONEY_ASSERTION_ISSUER", "sagolik-web"),
 		AssertionAudience:          get("MONEY_ASSERTION_AUDIENCE", "sagolik-money"),
 	}
+	hours, err := strconv.Atoi(get("MONEY_COOLING_OFF_HOURS", "24"))
+	if err != nil || hours < 1 || hours > 168 {
+		return c, errors.New("MONEY_COOLING_OFF_HOURS must be a whole number of hours between 1 and 168")
+	}
+	c.CoolingOff = time.Duration(hours) * time.Hour
 	for _, id := range strings.Split(get("MONEY_TLS_ALLOWED_CLIENTS", ""), ",") {
 		if id = strings.TrimSpace(id); id != "" {
 			c.AllowedClients = append(c.AllowedClients, id)

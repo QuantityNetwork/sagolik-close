@@ -53,6 +53,15 @@ const EnvSchema = z.object({
   SENTRY_DSN: optional,
   NEXT_PUBLIC_POSTHOG_KEY: optional,
 
+  /** Go money service (services/money). When set, instructions and escrow-reported movements live there. */
+  MONEY_SERVICE_URL: optional,
+  MONEY_SERVICE_CA_FILE: optional,
+  MONEY_SERVICE_CERT_FILE: optional,
+  MONEY_SERVICE_KEY_FILE: optional,
+  /** Ed25519 private JWK used to sign per-request user assertions for the money service. */
+  MONEY_ASSERTION_SIGNING_JWK_FILE: optional,
+  MONEY_ASSERTION_KID: z.string().default("web-1"),
+
   /** Shared secret used by the built-in mock providers to sign their webhooks. */
   MOCK_WEBHOOK_SECRET: z.string().default("mock_webhook_secret_local_only"),
   /** Public demo deployments: rebuild the in-memory demo every N hours so visitors start fresh (0 = never). */
@@ -82,6 +91,11 @@ export function parseEnv(source: Record<string, string | undefined> = process.en
   const supabaseConfigured = !!(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   const demoMode = env.DEMO_MODE || !supabaseConfigured;
 
+  if (env.MONEY_SERVICE_URL) {
+    const missing = (["MONEY_SERVICE_CA_FILE", "MONEY_SERVICE_CERT_FILE", "MONEY_SERVICE_KEY_FILE", "MONEY_ASSERTION_SIGNING_JWK_FILE"] as const).filter((k) => !env[k]);
+    if (missing.length) throw new EnvError(`MONEY_SERVICE_URL is set, so ${missing.join(", ")} must be set too (mutual TLS and signed assertions).`);
+    if (!env.MONEY_SERVICE_URL.startsWith("https://")) throw new EnvError("MONEY_SERVICE_URL must be https (mutual TLS).");
+  }
   // Any deployed environment signs sessions with its own secret — the local fallback is public.
   if (env.APP_ENV !== "local" && (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32)) {
     throw new EnvError(`SESSION_SECRET (≥32 chars) is required when APP_ENV=${env.APP_ENV}.`);

@@ -2,7 +2,7 @@
 
 Isolated service that will own bank tokens, payment instructions, provider events and the funds-tracking ledger for Sagolik Close. It never holds client funds. Design: [docs/money-service.md](../../docs/money-service.md).
 
-**Status: M1 (foundation) complete.** The web app does not call it yet; M2 moves instruction and ledger logic here.
+**Status: M1 (foundation) and M2 (instructions and ledger) complete.** The web app uses it when `MONEY_SERVICE_URL` is set.
 
 ## What M1 provides
 
@@ -12,7 +12,9 @@ Isolated service that will own bank tokens, payment instructions, provider event
 | Caller identity | A per-request Ed25519 user assertion: algorithm pinned, strict decoding, at most 60 s, single use through a Postgres replay guard (`internal/assertion`). The web app signs it with `signUserAssertion` in `@sagolik/security`. A shared test vector keeps TypeScript and Go byte-compatible. |
 | Encryption | Envelope encryption: a fresh AES-256-GCM data key per value, bound to its purpose and record. Two key providers: **local keyring** (no cost) or **AWS KMS** (optional, pay per use) (`internal/keys`). |
 | Data | Own Postgres database. Embedded migrations. A **double-entry ledger** where every group must balance, checked at commit. A **hash-chained audit log** that detects any edit. Triggers make both append-only even for the runtime role (`internal/store`). |
-| API | `GET /v1/session` and `GET /v1/transactions/{id}/funds`. Funds reads are policy-checked (roles mirror the web app, with a parity test) and audited; if the audit write fails, no data is returned (`internal/httpapi`, `api/openapi.yaml`). |
+| Instructions (M2) | Versioned, sealed payment instructions: cooling-off on changes, second-person verification (the author is refused), step-up for every write, and audited reveal of full wire details to the payer. |
+| Ledger (M2) | Escrow-reported movements (expected, received, paid out), idempotent per reference, double-entry. |
+| API | `GET /v1/session`, `GET /v1/transactions/{id}/funds`, plus instruction and ledger endpoints (see `api/openapi.yaml`). Funds reads are policy-checked (roles mirror the web app, with a parity test) and audited; if the audit write fails, no data is returned (`internal/httpapi`, `api/openapi.yaml`). |
 | Operations | A private health listener (`/healthz`, and `/readyz`, which checks the database plus a key round-trip). JSON logs without ids or secrets. Config that refuses unsafe setups (plaintext, local keys in production, and the database without `sslmode=verify-full` outside local). A 25 MB distroless non-root image. |
 
 ## Run locally
@@ -33,6 +35,7 @@ go run ./cmd/money
 
 ```bash
 ./scripts/test-db.sh            # all tests, race detector, throwaway PostgreSQL 16
+./scripts/integration.sh        # the web app's services against this service over mTLS
 go vet ./...
 go run honnef.co/go/tools/cmd/staticcheck@2025.1.1 ./...
 go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...

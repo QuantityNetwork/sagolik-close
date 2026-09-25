@@ -9,11 +9,13 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +40,7 @@ func TestServiceEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var tokenFor func(user, role string, stepUp bool) string
 	// Fresh database for this test.
 	admin, err := pgx.Connect(ctx, dbURL)
 	if err != nil {
@@ -101,16 +104,32 @@ func TestServiceEndToEnd(t *testing.T) {
 	webTLS, _ := web.TLS()
 	client := &http.Client{Timeout: 5 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, Certificates: []tls.Certificate{webTLS}, MinVersion: tls.VersionTLS13}}}
 
-	token := func(role string) string {
+	token := func(role string) string { return tokenFor("4a6a4324-5fc8-4baa-a828-14210de77d3c", role, false) }
+	_ = token
+	tokenFor = func(user, role string, stepUp bool) string {
 		enc := func(v any) string { b, _ := json.Marshal(v); return base64.RawURLEncoding.EncodeToString(b) }
 		jti := make([]byte, 16)
 		_, _ = rand.Read(jti)
 		now := time.Now().Unix()
 		in := enc(map[string]any{"alg": "EdDSA", "typ": "JWT", "kid": "web-1"}) + "." + enc(map[string]any{
-			"iss": "sagolik-web", "aud": "sagolik-money", "sub": "4a6a4324-5fc8-4baa-a828-14210de77d3c",
+			"iss": "sagolik-web", "aud": "sagolik-money", "sub": user,
 			"txn": "a8db1096-1336-4467-8fd9-6415bd8939c0", "role": role, "aal": "aal2", "iat": now, "exp": now + 60,
-			"jti": base64.RawURLEncoding.EncodeToString(jti)})
+			"jti": base64.RawURLEncoding.EncodeToString(jti), "step_up_at": map[bool]any{true: now - 30, false: nil}[stepUp]})
 		return in + "." + base64.RawURLEncoding.EncodeToString(ed25519.Sign(priv, []byte(in)))
+	}
+	post := func(path, tok, body string) (int, map[string]any) {
+		req, _ := http.NewRequest("POST", "https://"+addr.API+path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		b, _ := io.ReadAll(res.Body)
+		_ = json.Unmarshal(b, &out)
+		return res.StatusCode, out
 	}
 	get := func(path, tok string) (int, map[string]any) {
 		req, _ := http.NewRequest("GET", "https://"+addr.API+path, nil)
@@ -175,9 +194,71 @@ func TestServiceEndToEnd(t *testing.T) {
 	if _, err := bare.Get("https://" + addr.API + "/v1/session"); err == nil {
 		t.Fatal("connection without client certificate must fail")
 	}
-	// The funds read was audited and the chain verifies.
-	if n, err := st.VerifyAuditChain(ctx); err != nil || n != 1 {
-		t.Fatalf("audit chain: %d %v", n, err)
+	// ---- M2: payment instructions and escrow-reported movements
+	const (
+		escrow = "43964358-5d5f-4521-a52c-63562021c400"
+		title  = "11111111-1111-4111-8111-111111111111"
+		buyer  = "4a6a4324-5fc8-4baa-a828-14210de77d3c"
+		txPath = "/v1/transactions/a8db1096-1336-4467-8fd9-6415bd8939c0"
+	)
+	instr := `{"purpose":"closing_funds_to_escrow","beneficiaryName":"Maple Title & Escrow — Trust Account","bankName":"Sandbox National Bank","routingNumber":"021000021","accountNumber":"0001 2345 6789","currency":"USD"}`
+	if code, body := post(txPath+"/instructions", tokenFor(escrow, "escrow_officer", false), instr); code != 403 || body["error"].(map[string]any)["code"] != "step_up_required" {
+		t.Fatalf("create without step-up: %d %v", code, body)
+	}
+	if code, _ := post(txPath+"/instructions", tokenFor(buyer, "buyer", true), instr); code != 404 {
+		t.Fatalf("buyer must not create instructions: %d", code)
+	}
+	code, body = post(txPath+"/instructions", tokenFor(escrow, "escrow_officer", true), instr)
+	if code != 201 {
+		t.Fatalf("create: %d %v", code, body)
+	}
+	ins := body["instruction"].(map[string]any)
+	iid := ins["id"].(string)
+	if ins["accountMask"] != "6789" || ins["status"] != "pending_verification" || strings.Contains(fmt.Sprint(body), "000123456789") {
+		t.Fatalf("created: %v", ins)
+	}
+	verify := `{"method":"out_of_band_call","reference":"Called escrow on the number on file"}`
+	if code, _ := post("/v1/instructions/"+iid+"/verify", tokenFor(escrow, "escrow_officer", true), verify); code != 403 {
+		t.Fatalf("author must not verify: %d", code)
+	}
+	if code, body := post("/v1/instructions/"+iid+"/reveal", tokenFor(buyer, "buyer", true), `{}`); code != 409 {
+		t.Fatalf("reveal before verification: %d %v", code, body)
+	}
+	if code, body := post("/v1/instructions/"+iid+"/verify", tokenFor(title, "title_officer", true), verify); code != 200 || body["instruction"].(map[string]any)["status"] != "verified" {
+		t.Fatalf("verify: %d %v", code, body)
+	}
+	if code, _ := post("/v1/instructions/"+iid+"/reveal", tokenFor(buyer, "buyer_agent", true), `{}`); code != 404 {
+		t.Fatalf("agent must not see wire details: %d", code)
+	}
+	if code, body := post("/v1/instructions/"+iid+"/reveal", tokenFor(buyer, "buyer", true), `{}`); code != 200 || body["accountNumber"] != "000123456789" {
+		t.Fatalf("reveal: %d %v", code, body)
+	}
+	receipt := `{"kind":"receipt","amount":17500000,"currency":"USD","reference":"Wire ref FW-20260924-001","idempotencyKey":"escrow-receipt-closing-1"}`
+	if code, body := post(txPath+"/ledger/movements", tokenFor(escrow, "escrow_officer", true), receipt); code != 201 || body["balances"].([]any)[0].(map[string]any)["outstanding"].(float64) != 0 {
+		t.Fatalf("record receipt: %d %v", code, body)
+	}
+	if code, _ := post(txPath+"/ledger/movements", tokenFor(escrow, "escrow_officer", true), receipt); code != 200 {
+		t.Fatalf("idempotent replay: %d", code)
+	}
+	if code, _ := post(txPath+"/ledger/movements", tokenFor(title, "title_officer", true), receipt); code != 404 {
+		t.Fatalf("title officer can't record escrow movements: %d", code)
+	}
+
+	// Everything above is in the audit chain, and it verifies.
+	var actions []string
+	rows, _ := admin2(t, ctx, e2eURL).Query(ctx, `select action from audit_events order by seq`)
+	for rows.Next() {
+		var a string
+		_ = rows.Scan(&a)
+		actions = append(actions, a)
+	}
+	for _, want := range []string{"funds.viewed", "instruction.created", "instruction.verified", "instruction.revealed", "ledger.recorded"} {
+		if !slices.Contains(actions, want) {
+			t.Fatalf("audit missing %s: %v", want, actions)
+		}
+	}
+	if _, err := st.VerifyAuditChain(ctx); err != nil {
+		t.Fatalf("audit chain: %v", err)
 	}
 
 	cancel()
@@ -192,4 +273,14 @@ func TestServiceEndToEnd(t *testing.T) {
 	if strings.Contains(logs.String(), "a8db1096") || strings.Contains(logs.String(), e2eURL) {
 		t.Fatal("logs must not contain transaction ids or the database url")
 	}
+}
+
+func admin2(t *testing.T, ctx context.Context, url string) *pgx.Conn {
+	t.Helper()
+	c, err := pgx.Connect(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = c.Close(context.Background()) })
+	return c
 }

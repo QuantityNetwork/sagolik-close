@@ -101,3 +101,25 @@ jobs:
       - name: Build
         run: CGO_ENABLED=0 go build -trimpath -o /dev/null ./cmd/money
 
+  money-integration:
+    # The web app's services against the real Go money service (mTLS, signed assertions, Postgres).
+    runs-on: ubuntu-24.04
+    env:
+      GOTOOLCHAIN: auto
+      CI_REQUIRE_MONEY_IT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/money/go.mod
+          cache-dependency-path: services/money/go.sum
+      - run: pnpm install --frozen-lockfile
+      - name: PostgreSQL server binaries
+        run: sudo apt-get update && sudo apt-get install -y postgresql
+      - run: ./services/money/scripts/integration.sh
+

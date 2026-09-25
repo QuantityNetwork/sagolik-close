@@ -41,3 +41,40 @@ test("the assistant explains but refuses to act", async ({ page }) => {
   await page.getByRole("button", { name: "Ask" }).click();
   await expect(page.getByText(/can't|cannot/i).first()).toBeVisible();
 });
+
+test("buyer sees full wire details only after confirming it's them", async ({ page }) => {
+  await signInAs(page, "olivia.carter");
+  await page.goto("/app/transactions");
+  await page.getByRole("link", { name: /Maple Ridge/ }).first().click();
+  await page.getByRole("navigation", { name: /transaction/i }).getByRole("link", { name: "Money" }).click();
+  await expect(page.getByText("•••• 6789")).toBeVisible();
+  await expect(page.getByText(/\d{6,}6789/)).toHaveCount(0);
+
+  await page.getByRole("button", { name: /Show full wire details/ }).click();
+  await page.getByRole("link", { name: "Confirm" }).click();
+  await completeStepUp(page);
+  await page.getByRole("button", { name: /Show full wire details/ }).click();
+  await expect(page.getByText("Before you send")).toBeVisible();
+  await expect(page.getByText(/^\d{8,17}$/).filter({ hasText: /6789$/ })).toBeVisible();
+  await page.getByRole("button", { name: /Hide details/ }).click();
+  await expect(page.getByText(/^\d{8,17}$/).filter({ hasText: /6789$/ })).toHaveCount(0);
+});
+
+test("escrow officer records funds received from their escrow system", async ({ page }) => {
+  await signInAs(page, "marcus.lee");
+  await page.goto("/app/transactions");
+  await page.getByRole("link", { name: /Maple Ridge/ }).first().click();
+  await page.getByRole("navigation", { name: /transaction/i }).getByRole("link", { name: "Money" }).click();
+  await page.getByText("Record funds from your escrow system").click();
+  await page.fill("#amount", "1,000.00");
+  await page.fill("#mref", "Wire FW-E2E-1");
+  await page.locator("form:has(#mref) button[type=submit]").click();
+  await page.getByRole("link", { name: "Confirm" }).click();
+  await completeStepUp(page);
+  await page.getByText("Record funds from your escrow system").click();
+  await page.fill("#amount", "1,000.00");
+  await page.fill("#mref", "Wire FW-E2E-1");
+  await page.locator("form:has(#mref) button[type=submit]").click();
+  await expect(page.getByText("Funds received recorded.")).toBeVisible();
+  await expect(page.getByText("Funds received (recorded by escrow)")).toBeVisible();
+});

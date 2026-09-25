@@ -15,6 +15,7 @@ import {
   declareFundsAction,
   initiatePaymentAction,
   openEscrowAction,
+  recordEscrowMovementAction,
   refreshBankAction,
   requestDisbursementAction,
   satisfyEscrowConditionAction,
@@ -22,6 +23,7 @@ import {
   verifyInstructionAction,
 } from "@/app/actions/transaction";
 import { ActionButton, ActionForm, SubmitButton } from "@/components/forms";
+import { WireDetails } from "@/components/app/wire-details";
 import { loadTx } from "@/lib/server/tx";
 
 export const metadata: Metadata = { title: "Money" };
@@ -44,6 +46,8 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
   const rules = evaluateRules(s);
   const depositRule = rules.find((r) => r.rule.id === "escrow_deposit_enabled")!;
   const fundsRule = rules.find((r) => r.rule.id === "closing_funds_enabled")!;
+  const escrowOfficer = s.participants.find((p) => p.role === "escrow_officer" && p.status === "active");
+  const escrowOfficerName = escrowOfficer ? escrowOfficer.displayName : null;
   const isBuyer = s.participants.some((p) => p.userId === actor.userId && (p.role === "buyer" || p.role === "co_buyer"));
   const people = Object.fromEntries(s.participants.filter((p) => p.userId).map((p) => [p.userId!, p.displayName]));
   const outstanding = s.escrow ? Math.max(0, s.escrow.requiredAmount - s.escrow.receivedAmount) : money.remainingAtClosing;
@@ -107,8 +111,14 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
                         <option value="provider_attested">Attested by the escrow provider</option>
                       </Select>
                     </Field>
+                    <Field label="Call reference (optional)" htmlFor="reference" className="min-w-56 flex-1">
+                      <Input id="reference" name="reference" maxLength={200} placeholder="e.g. who you spoke to and when" />
+                    </Field>
                     <SubmitButton>Verify instructions</SubmitButton>
                   </ActionForm>
+                ) : null}
+                {can("payment.initiate") && (ins.status === "verified" || ins.status === "locked") ? (
+                  <WireDetails transactionId={id} instructionId={ins.id} escrowContact={escrowOfficerName} />
                 ) : null}
                 {history.length > 1 ? (
                   <details className="text-[13px]">
@@ -354,6 +364,30 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
                     </ActionForm>
                   ) : null}
                 </div>
+                {can("escrow.manage") ? (
+                  <details className="rounded-lg border border-line px-4 py-3">
+                    <summary className="cursor-pointer text-sm font-medium text-ink-2">Record funds from your escrow system</summary>
+                    <p className="mt-2 text-[12.5px] text-ink-3">Enter what your escrow system shows. Sagolik Close records it; it never moves the money.</p>
+                    <ActionForm action={recordEscrowMovementAction} className="mt-3 grid gap-3 sm:grid-cols-3" resetOnSuccess>
+                      <input type="hidden" name="transactionId" value={id} />
+                      <Field label="Type" htmlFor="kind">
+                        <Select id="kind" name="kind" defaultValue="receipt">
+                          <option value="receipt">Funds received</option>
+                          <option value="disbursement">Funds paid out</option>
+                        </Select>
+                      </Field>
+                      <Field label={`Amount (${cur})`} htmlFor="amount">
+                        <Input id="amount" name="amount" inputMode="decimal" required placeholder="0.00" />
+                      </Field>
+                      <Field label="Reference in your system" htmlFor="mref">
+                        <Input id="mref" name="reference" required minLength={3} maxLength={120} placeholder="e.g. Wire FW-1042" />
+                      </Field>
+                      <div className="sm:col-span-3">
+                        <SubmitButton variant="secondary">Record</SubmitButton>
+                      </div>
+                    </ActionForm>
+                  </details>
+                ) : null}
                 {ledger.length ? (
                   <div>
                     <p className="text-[13px] font-medium text-ink-2">Ledger</p>

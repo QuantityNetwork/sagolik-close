@@ -24,6 +24,12 @@ type Store interface {
 	Ping(ctx context.Context) error
 	FundsSummary(ctx context.Context, txID string) ([]store.Summary, error)
 	AppendAudit(ctx context.Context, e store.AuditEvent) (store.AuditEvent, error)
+	RecordMovement(ctx context.Context, m store.Movement) (string, bool, error)
+	CreateInstruction(ctx context.Context, env store.Sealer, n store.NewInstruction) (store.Instruction, error)
+	GetInstruction(ctx context.Context, id string, now time.Time) (store.Instruction, error)
+	ListInstructions(ctx context.Context, txID string, now time.Time) ([]store.Instruction, error)
+	VerifyInstruction(ctx context.Context, id, actor, method, reference, requestID string, now time.Time) (store.Instruction, error)
+	RevealInstruction(ctx context.Context, env store.Sealer, id, actor, requestID string, now time.Time) (store.Revealed, error)
 }
 
 // Sealer is the envelope-encryption dependency (used by readiness).
@@ -33,11 +39,12 @@ type Sealer interface {
 }
 
 type Server struct {
-	Verifier *assertion.Verifier
-	Store    Store
-	Sealer   Sealer
-	Log      *slog.Logger
-	Now      func() time.Time
+	Verifier   *assertion.Verifier
+	Store      Store
+	Sealer     Sealer
+	Log        *slog.Logger
+	Now        func() time.Time
+	CoolingOff time.Duration // waiting period for changed instructions (default 24h)
 }
 
 func (s *Server) now() time.Time {
@@ -52,6 +59,11 @@ func (s *Server) APIHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/session", s.authed(s.session))
 	mux.HandleFunc("GET /v1/transactions/{id}/funds", s.authed(s.funds))
+	mux.HandleFunc("GET /v1/transactions/{id}/instructions", s.authed(s.listInstructions))
+	mux.HandleFunc("POST /v1/transactions/{id}/instructions", s.authed(s.createInstruction))
+	mux.HandleFunc("POST /v1/instructions/{iid}/verify", s.authed(s.verifyInstruction))
+	mux.HandleFunc("POST /v1/instructions/{iid}/reveal", s.authed(s.revealInstruction))
+	mux.HandleFunc("POST /v1/transactions/{id}/ledger/movements", s.authed(s.recordMovement))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "No such endpoint.")
 	})
@@ -148,7 +160,7 @@ func (s *Server) funds(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	// The assertion is scoped to one transaction; the path must match it and the
 	// role must be allowed to see money. Both refusals look the same (no oracle).
-	if !uuidRe.MatchString(id) || p.TransactionID != id || !policy.CanViewFunds(p.Role) {
+	if !s.scoped(p, id, policy.ViewFunds) {
 		writeError(w, r, http.StatusNotFound, "not_found", "That transaction couldn't be found, or you don't have access to its funds.")
 		return
 	}

@@ -47,6 +47,8 @@ func TestUnsafeConfigsAreRefused(t *testing.T) {
 		"kms without key":          func(m map[string]string) { m["MONEY_KEY_PROVIDER"] = "awskms" },
 		"unknown provider":         func(m map[string]string) { m["MONEY_KEY_PROVIDER"] = "vault" },
 		"no jwks":                  func(m map[string]string) { delete(m, "MONEY_ASSERTION_JWKS_FILE") },
+		"cooling-off zero":         func(m map[string]string) { m["MONEY_COOLING_OFF_HOURS"] = "0" },
+		"cooling-off not a number": func(m map[string]string) { m["MONEY_COOLING_OFF_HOURS"] = "1d" },
 		"unknown env":              func(m map[string]string) { m["MONEY_ENV"] = "prod" },
 	}
 	for name, mutate := range cases {

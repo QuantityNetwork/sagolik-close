@@ -25,6 +25,7 @@ import { AppError, badRequest, conflict, forbidden, notFound } from "../errors";
 import { audit, emit } from "../events";
 import { accessContext, loadAuthorized } from "../snapshot";
 import { newId, nowIso } from "../util";
+import { HELD_BY_MONEY_SERVICE, moneyCaller, viaMoney } from "../money/bridge";
 import { reconcile } from "./engine";
 import { postSystemMessage } from "./messaging";
 import { notify, participantUserIds } from "./notifications";
@@ -54,27 +55,47 @@ export async function createBankInstruction(ctx: ServiceContext, transactionId: 
 
   const previous = latestInstruction(s, input.purpose) ?? null;
   const settings = await orgSettings(ctx, s.transaction.organizationId);
-  const risk = previous ? assessRisk({ kind: "bank_instruction_changed", hoursToClosing: hoursUntil(ctx, s.transaction.expectedClosingDate) }, settings.coolingOffHours) : null;
+  const hoursToClosing = hoursUntil(ctx, s.transaction.expectedClosingDate);
+  const risk = previous ? assessRisk({ kind: "bank_instruction_changed", hoursToClosing }, settings.coolingOffHours) : null;
   const now = ctx.now();
-  const effectiveAfter = risk && risk.coolingOffHours > 0 ? new Date(now.getTime() + risk.coolingOffHours * 3_600_000).toISOString() : null;
+  let effectiveAfter = risk && risk.coolingOffHours > 0 ? new Date(now.getTime() + risk.coolingOffHours * 3_600_000).toISOString() : null;
+  const accountNumber = input.accountNumber.replace(/\s/g, "");
+
+  // Money service mode: it seals the account number and owns versioning and cooling-off;
+  // the web app keeps a masked mirror for display and workflow.
+  const authoritative = ctx.money
+    ? (
+        await viaMoney(() =>
+          ctx.money!.createInstruction(moneyCaller(ctx, s, "beneficiary.modify"), {
+            purpose: input.purpose,
+            beneficiaryName: input.beneficiaryName,
+            bankName: input.bankName,
+            routingNumber: input.routingIdentifier.replace(/\s/g, ""),
+            accountNumber,
+            currency: input.currency,
+            ...(hoursToClosing !== null ? { hoursToClosing } : {}),
+          }),
+        )
+      ).instruction
+    : null;
+  if (authoritative) effectiveAfter = authoritative.effectiveAfter;
 
   if (previous && previous.status !== "superseded" && previous.status !== "rejected") {
     await ctx.writer.bank_instructions.update(previous.id, { status: "superseded" });
   }
-  const accountNumber = input.accountNumber.replace(/\s/g, "");
   const instruction = await ctx.writer.bank_instructions.insert({
-    id: newId(),
+    id: authoritative?.id ?? newId(),
     transactionId,
     purpose: input.purpose,
     beneficiaryName: input.beneficiaryName,
     bankName: input.bankName,
-    accountMask: lastFour(accountNumber),
-    routingIdentifier: input.routingIdentifier,
-    encryptedAccountNumber: encryptField(accountNumber, ctx.keyRing, `bank_instruction:${transactionId}:${input.purpose}`),
+    accountMask: authoritative?.accountMask ?? lastFour(accountNumber),
+    routingIdentifier: authoritative?.routingNumber ?? input.routingIdentifier,
+    encryptedAccountNumber: authoritative ? HELD_BY_MONEY_SERVICE : encryptField(accountNumber, ctx.keyRing, `bank_instruction:${transactionId}:${input.purpose}`),
     currency: input.currency,
     status: "pending_verification",
-    version: (previous?.version ?? 0) + 1,
-    previousVersionId: previous?.id ?? null,
+    version: authoritative?.version ?? (previous?.version ?? 0) + 1,
+    previousVersionId: authoritative?.previousId ?? previous?.id ?? null,
     verifiedBy: null,
     verifiedAt: null,
     verificationMethod: opts.providerAttested ? "provider_attested" : null,
@@ -120,7 +141,7 @@ export async function createBankInstruction(ctx: ServiceContext, transactionId: 
 }
 
 /** Second-person, out-of-band verification. The creator can never verify their own instruction. */
-export async function verifyBankInstruction(ctx: ServiceContext, instructionId: string, method: string) {
+export async function verifyBankInstruction(ctx: ServiceContext, instructionId: string, method: string, reference = "") {
   const actor = requireUser(ctx);
   if (!(VERIFICATION_METHODS as readonly string[]).includes(method)) throw badRequest("Choose how the instructions were verified.");
   const ins = await ctx.writer.bank_instructions.get(instructionId);
@@ -131,6 +152,10 @@ export async function verifyBankInstruction(ctx: ServiceContext, instructionId: 
   if (ins.status !== "pending_verification") throw conflict("These instructions aren't waiting for verification.");
   const latest = latestInstruction(s, ins.purpose);
   if (latest?.id !== ins.id) throw conflict("A newer version of these instructions exists.");
+  if (ctx.money) {
+    // The money service re-checks every rule and records the verification.
+    await viaMoney(() => ctx.money!.verifyInstruction(moneyCaller(ctx, s, "beneficiary.verify"), ins.id, { method, reference: reference.trim() }));
+  }
   const updated = await ctx.writer.bank_instructions.update(ins.id, { status: "verified", verifiedBy: actor.userId, verifiedAt: nowIso(ctx), verificationMethod: method });
   await audit(ctx, {
     action: "bank_instruction.verified",
@@ -138,11 +163,37 @@ export async function verifyBankInstruction(ctx: ServiceContext, instructionId: 
     resourceId: ins.id,
     transactionId: ins.transactionId,
     organizationId: s.transaction.organizationId,
-    metadata: { method, version: ins.version },
+    metadata: { method, version: ins.version, hasReference: reference.trim() !== "" },
   });
   await postSystemMessage(ctx, ins.transactionId, `Escrow payment instructions v${ins.version} (account ending ${ins.accountMask}) were verified by ${actor.displayName}.`, { type: "bank_instruction", id: ins.id });
   await reconcile(ctx, ins.transactionId);
   return updated;
+}
+
+/**
+ * Full wire details for the payer (F1: the buyer sends money from their own
+ * bank). Only for current, verified instructions past any waiting period;
+ * requires a fresh step-up and is audited.
+ */
+export async function revealBankInstruction(ctx: ServiceContext, instructionId: string) {
+  const actor = requireUser(ctx);
+  const ins = await ctx.writer.bank_instructions.get(instructionId);
+  if (!ins) throw notFound("Those payment instructions");
+  const s = await loadAuthorized(ctx, ins.transactionId, "payment.initiate");
+  assertStepUp(actor, "bank_instruction.reveal", ctx.now().getTime());
+  assertUsableInstruction(ctx, s, ins);
+  const accountNumber = ctx.money
+    ? (await viaMoney(() => ctx.money!.revealInstruction(moneyCaller(ctx, s, "payment.initiate"), ins.id))).accountNumber
+    : decryptField(ins.encryptedAccountNumber, ctx.keyRing, `bank_instruction:${ins.transactionId}:${ins.purpose}`);
+  await audit(ctx, {
+    action: "bank_instruction.revealed",
+    resourceType: "bank_instruction",
+    resourceId: ins.id,
+    transactionId: ins.transactionId,
+    organizationId: s.transaction.organizationId,
+    metadata: { version: ins.version },
+  });
+  return { beneficiaryName: ins.beneficiaryName, bankName: ins.bankName, routingIdentifier: ins.routingIdentifier, accountNumber, version: ins.version };
 }
 
 // ----------------------------------------------------------------------------- payments
@@ -160,7 +211,8 @@ export async function initiatePayment(ctx: ServiceContext, raw: unknown, idempot
   const actor = requireUser(ctx);
   const input = CreatePaymentInput.parse(raw);
   const s = await loadAuthorized(ctx, input.transactionId, "payment.initiate");
-  if (!isFlagEnabled("payment_initiation", { overrides: ctx.flags, organizationId: s.transaction.organizationId })) {
+  if (ctx.money || !isFlagEnabled("payment_initiation", { overrides: ctx.flags, organizationId: s.transaction.organizationId })) {
+    // With the money service, transfers stay with the payer's own bank (F1) until escrow-initiated payments are cleared by counsel.
     throw badRequest("Transfers are sent from your own bank for this transaction. Use the verified instructions shown on the Money page.");
   }
   assertStepUp(actor, "payment.initiate", ctx.now().getTime());

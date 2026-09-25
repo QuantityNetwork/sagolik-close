@@ -68,6 +68,20 @@ func (s *Store) AppendAudit(ctx context.Context, e AuditEvent) (AuditEvent, erro
 	return e, err
 }
 
+// appendAuditInTx appends inside a caller's transaction, so the audited change
+// and its audit entry commit (or roll back) together.
+func (s *Store) appendAuditInTx(ctx context.Context, tx pgx.Tx, e AuditEvent) error {
+	details, err := canonicalDetails(e.Details)
+	if err != nil {
+		return fmt.Errorf("store: audit details: %w", err)
+	}
+	occurred := e.OccurredAt
+	if occurred.IsZero() {
+		occurred = time.Now()
+	}
+	return appendAuditTx(ctx, tx, &e, occurred.UTC().Truncate(time.Microsecond), details)
+}
+
 func appendAuditTx(ctx context.Context, tx pgx.Tx, e *AuditEvent, occurred time.Time, details string) error {
 	if _, err := tx.Exec(ctx, `select pg_advisory_xact_lock(7240115002)`); err != nil {
 		return err

@@ -268,8 +268,27 @@ export async function verifyInstructionAction(_p: ActionState, fd: FormData): Pr
   return runAction(async () => {
     const { ctx } = await requireContext();
     const txId = id(fd);
-    await core.verifyBankInstruction(ctx, id(fd, "instructionId"), formString(fd, "method") ?? "");
+    await core.verifyBankInstruction(ctx, id(fd, "instructionId"), formString(fd, "method") ?? "", formString(fd, "reference") ?? "");
     return { message: "Instructions verified.", revalidate: [txPath(txId)] };
+  });
+}
+
+/** Full wire details for the payer. Returned to this request only; never cached or logged. */
+export async function revealInstructionAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const { ctx } = await requireContext();
+    const details = await core.revealBankInstruction(ctx, id(fd, "instructionId"));
+    return { data: details };
+  });
+}
+
+export async function recordEscrowMovementAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const { ctx } = await requireContext();
+    const txId = id(fd);
+    const kind = formString(fd, "kind") === "disbursement" ? "disbursement" : "receipt";
+    await core.recordEscrowMovement(ctx, txId, { kind, amount: parseMoneyInput(formString(fd, "amount")) ?? 0, reference: formString(fd, "reference") ?? "" });
+    return { message: kind === "receipt" ? "Funds received recorded." : "Payout recorded.", revalidate: [txPath(txId)] };
   });
 }
 

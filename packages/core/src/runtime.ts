@@ -24,6 +24,7 @@ import { consoleLogger, type Logger, type ServiceContext } from "./context";
 import { buildDemoData, loadDemoData } from "./demo/seed";
 import { registerReactions } from "./services/reactions";
 import { handleWebhook } from "./services/webhooks";
+import { MoneyServiceClient } from "./money/client";
 import { type DocumentStorage, MemoryDocumentStorage, SupabaseDocumentStorage } from "./storage";
 
 export interface Runtime {
@@ -37,6 +38,7 @@ export interface Runtime {
   serviceClient: SupabaseClient | null;
   log: Logger;
   startedAt: number;
+  money: MoneyServiceClient | null;
 }
 
 async function init(): Promise<Runtime> {
@@ -66,7 +68,18 @@ async function init(): Promise<Runtime> {
     log.info("runtime: LOCAL demo mode (in-memory store, sandbox providers, fictional data)");
   }
 
-  const runtime: Runtime = { env, mode, providers, keyRing, serviceDb, storage, serviceClient, log, startedAt: Date.now() };
+  const money = env.MONEY_SERVICE_URL
+    ? MoneyServiceClient.fromFiles({
+        url: env.MONEY_SERVICE_URL,
+        caFile: env.MONEY_SERVICE_CA_FILE!,
+        certFile: env.MONEY_SERVICE_CERT_FILE!,
+        keyFile: env.MONEY_SERVICE_KEY_FILE!,
+        signingJwkFile: env.MONEY_ASSERTION_SIGNING_JWK_FILE!,
+        kid: env.MONEY_ASSERTION_KID,
+      })
+    : null;
+  if (money) log.info("runtime: payment instructions and escrow movements are handled by the money service", { url: env.MONEY_SERVICE_URL });
+  const runtime: Runtime = { env, mode, providers, keyRing, serviceDb, storage, serviceClient, log, startedAt: Date.now(), money };
 
   // Sandbox providers deliver signed webhooks through the same pipeline real providers use.
   setMockWebhookSink(async (providerId, rawBody, signature) => {
@@ -157,6 +170,7 @@ export function systemContext(rt: Runtime, source: string, flags: FlagOverride[]
     log: rt.log,
     now: () => new Date(),
     outboxMode: rt.mode === "memory" ? "inline" : "worker",
+    money: rt.money,
   };
 }
 

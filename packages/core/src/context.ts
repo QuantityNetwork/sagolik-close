@@ -3,6 +3,7 @@
  * session) or by the worker (as the system actor). Services never read
  * identity from request bodies.
  */
+import type { MoneyServiceClient } from "./money/client";
 import type { Actor } from "@sagolik/auth";
 import type { Env, FlagOverride } from "@sagolik/config";
 import type { Db } from "@sagolik/database";
@@ -38,6 +39,8 @@ export interface ServiceContext {
   now(): Date;
   /** "inline": domain events are dispatched in-process right after commit (local/demo). "worker": the worker drains the outbox. */
   outboxMode: "inline" | "worker";
+  /** Go money service. When present it is the authority for payment instructions and escrow-reported movements. */
+  money: MoneyServiceClient | null;
 }
 
 export function isUser(actor: Actor | SystemActor): actor is Actor {

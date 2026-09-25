@@ -52,6 +52,102 @@ paths:
                     items: { $ref: "#/components/schemas/Balance" }
         "401": { $ref: "#/components/responses/Unauthenticated" }
         "404": { $ref: "#/components/responses/NotFound" }
+  /v1/transactions/{id}/instructions:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Payment instruction versions (masked), newest first per purpose
+      responses:
+        "200":
+          description: Versions with derived status
+          content:
+            application/json:
+              schema: { type: object, required: [instructions], properties: { instructions: { type: array, items: { $ref: "#/components/schemas/Instruction" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      summary: Record a new version (escrow officer; AAL2 + step-up within 5 minutes)
+      description: A changed version is high risk (critical within 72 hours of closing) and gets a cooling-off period before it can be used.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, beneficiaryName, bankName, routingNumber, accountNumber, currency]
+              additionalProperties: false
+              properties:
+                purpose: { type: string, enum: [earnest_money_to_escrow, closing_funds_to_escrow, seller_proceeds, loan_payoff] }
+                beneficiaryName: { type: string, minLength: 2, maxLength: 140 }
+                bankName: { type: string, minLength: 2, maxLength: 140 }
+                routingNumber: { type: string, pattern: "^[0-9]{9}$", description: US ABA routing number (checksum validated) }
+                accountNumber: { type: string, pattern: "^[0-9 ]{4,20}$" }
+                currency: { type: string, pattern: "^[A-Z]{3}$" }
+                hoursToClosing: { type: number }
+      responses:
+        "201": { description: Created (masked), content: { application/json: { schema: { type: object, properties: { instruction: { $ref: "#/components/schemas/Instruction" } } } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/StepUpRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+  /v1/instructions/{iid}/verify:
+    post:
+      summary: Second-person, out-of-band verification (title/escrow officer; not the author; step-up)
+      parameters:
+        - { name: iid, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              additionalProperties: false
+              properties:
+                method: { type: string, enum: [out_of_band_call, in_person, provider_attested] }
+                reference: { type: string, maxLength: 200 }
+      responses:
+        "200": { description: Verified, content: { application/json: { schema: { type: object, properties: { instruction: { $ref: "#/components/schemas/Instruction" } } } } } }
+        "403": { description: Step-up required, or the caller authored these instructions, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Superseded or already decided, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/instructions/{iid}/reveal:
+    post:
+      summary: Full wire details for the payer (buyer; verified, past cooling-off, step-up; audited)
+      parameters:
+        - { name: iid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: The only response that carries a full account number
+          content:
+            application/json:
+              schema: { type: object, required: [instruction, accountNumber], properties: { instruction: { $ref: "#/components/schemas/Instruction" }, accountNumber: { type: string } } }
+        "403": { description: Step-up required, or inside the cooling-off period, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Not verified or superseded, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/transactions/{id}/ledger/movements:
+    post:
+      summary: Record what the escrow system shows (escrow officer; step-up; idempotent)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind, amount, currency, reference, idempotencyKey]
+              additionalProperties: false
+              properties:
+                kind: { type: string, enum: [expectation, receipt, disbursement] }
+                amount: { type: integer, minimum: 1, description: Cents }
+                currency: { type: string, pattern: "^[A-Z]{3}$" }
+                reference: { type: string, minLength: 3, maxLength: 120 }
+                idempotencyKey: { type: string, minLength: 8, maxLength: 200 }
+      responses:
+        "201": { description: Recorded; returns derived balances }
+        "200": { description: Same idempotency key and contents — nothing new recorded }
+        "403": { $ref: "#/components/responses/StepUpRequired" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Key reused with different contents, or payout exceeds funds reported held, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
 components:
   securitySchemes:
     userAssertion:
@@ -79,7 +175,33 @@ components:
             code: { type: string }
             message: { type: string }
             requestId: { type: string }
+    Instruction:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        transactionId: { type: string, format: uuid }
+        purpose: { type: string }
+        version: { type: integer }
+        previousId: { type: [string, "null"], format: uuid }
+        beneficiaryName: { type: string }
+        bankName: { type: string }
+        routingNumber: { type: string }
+        accountMask: { type: string, pattern: "^[0-9]{4}$" }
+        currency: { type: string }
+        riskLevel: { type: string, enum: [low, medium, high, critical] }
+        effectiveAfter: { type: [string, "null"], format: date-time }
+        status: { type: string, enum: [pending_verification, verified, rejected, superseded] }
+        usable: { type: boolean }
+        verifiedBy: { type: [string, "null"], format: uuid }
+        verifiedAt: { type: [string, "null"], format: date-time }
+        verificationMethod: { type: [string, "null"] }
   responses:
+    BadRequest:
+      description: Invalid input
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    StepUpRequired:
+      description: The caller must confirm it's them (AAL2 + step-up within 5 minutes)
+      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     Unauthenticated:
       description: Missing, invalid, expired or replayed assertion
       content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }

@@ -65,10 +65,11 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 	}
 
 	srv := &httpapi.Server{
-		Verifier: &assertion.Verifier{Keys: jwks, Issuer: cfg.AssertionIssuer, Audience: cfg.AssertionAudience, Replay: st.ReplayGuard()},
-		Store:    st,
-		Sealer:   keys.NewEnvelope(provider),
-		Log:      log,
+		Verifier:   &assertion.Verifier{Keys: jwks, Issuer: cfg.AssertionIssuer, Audience: cfg.AssertionAudience, Replay: st.ReplayGuard()},
+		Store:      st,
+		Sealer:     keys.NewEnvelope(provider),
+		Log:        log,
+		CoolingOff: cfg.CoolingOff,
 	}
 
 	var tlsCfg *tls.Config

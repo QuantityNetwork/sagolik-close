@@ -62,6 +62,7 @@ func claims(role string, extra map[string]any) map[string]any {
 // ---- fakes
 
 type fakeStore struct {
+	Store    // unimplemented methods panic; money endpoints are tested against Postgres
 	mu       sync.Mutex
 	pingErr  error
 	audit    []store.AuditEvent
