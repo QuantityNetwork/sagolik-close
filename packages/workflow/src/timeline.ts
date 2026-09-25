@@ -70,6 +70,19 @@ const MILESTONE_DOCS: Partial<Record<MilestoneKey, DocumentCategory[]>> = {
   ownership_transferred: ["recording"],
 };
 
+const BUSINESS_MILESTONE_DOCS: Partial<Record<MilestoneKey, DocumentCategory[]>> = {
+  offer_accepted: ["letter_of_intent"],
+  identity_verified: ["identity"],
+  documents_received: ["due_diligence_report", "disclosure_schedules"],
+  financing_approved: ["mortgage"],
+  inspection_completed: ["due_diligence_report"],
+  title_cleared: ["lien_search"],
+  signing_complete: ["definitive_agreement", "funds_flow_memo", "transfer_instrument"],
+  funds_received: ["escrow"],
+  recording_submitted: ["closing_certificate", "transfer_instrument"],
+  ownership_transferred: ["closing_certificate"],
+};
+
 export interface MilestoneView {
   key: MilestoneKey;
   label: string;
@@ -95,6 +108,14 @@ export function isoDate(d: Date): string {
 function evaluateMilestoneFact(key: MilestoneKey, s: TransactionSnapshot, facts: Record<FactKey, FactResult>): FactResult {
   const f = MILESTONE_FACT[key];
   if (f === "offer") {
+    const j = getJurisdiction(s.transaction.jurisdiction);
+    if (j.vertical === "business") {
+      // A business deal starts with a signed letter of intent.
+      const loi = s.documents.some((d) => d.category === "letter_of_intent" && d.status !== "rejected");
+      return loi
+        ? { value: true, detail: "Letter of intent signed and on file." }
+        : { value: false, detail: "Upload the signed letter of intent.", responsibleRole: "broker" };
+    }
     const has = s.documents.some((d) => d.category === "purchase_agreement" && d.status !== "rejected");
     return has
       ? { value: true, detail: "Offer accepted and purchase agreement on file." }
@@ -144,7 +165,7 @@ export function buildTimeline(s: TransactionSnapshot, today: string = isoDate(ne
     const ownerRole = row?.ownerRole ?? result.responsibleRole ?? null;
     const owner = ownerRole ? (s.participants.find((p) => p.role === ownerRole && p.status !== "removed") ?? null) : null;
     const tasks = s.tasks.filter((t) => t.milestoneKey === key);
-    const categories = MILESTONE_DOCS[key] ?? [];
+    const categories = (jurisdiction.vertical === "business" ? BUSINESS_MILESTONE_DOCS : MILESTONE_DOCS)[key] ?? [];
     const documentIds = s.documents.filter((d) => categories.includes(d.category)).map((d) => d.id);
     const exceptions = result.value ? [] : exceptionsFor(key, s);
     const dueDate = row?.dueDate ?? null;

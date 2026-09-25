@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { askAssistant, DEMO_TRANSACTION_ID, getTransaction, reconcile, transactionView, commandCenter, listDocuments, openDocument } from "./index";
+import { buildTimeline, dealSubject } from "@sagolik/workflow";
+import { askAssistant, DEMO_BUSINESS_TRANSACTION_ID, DEMO_TRANSACTION_ID, getTransaction, loadSnapshot, reconcile, transactionView, commandCenter, listDocuments, openDocument } from "./index";
 import { createTestHarness } from "./testing";
 
 describe("demo environment", () => {
   it("loads, validates against the row schemas, and is internally consistent", async () => {
     const h = await createTestHarness({ seed: true });
     const txs = await h.db.transactions.find({});
-    expect(txs.length).toBe(4);
+    expect(txs.length).toBe(5);
     // Seeded states must already satisfy the workflow: reconciling moves nothing.
     for (const t of txs) expect(await reconcile(h.system(), t.id), t.reference).toEqual([]);
   });
@@ -46,5 +47,23 @@ describe("demo environment", () => {
     // The loan officer only sees files they're on.
     const michael = await commandCenter(await h.as("michael.reed"));
     expect(michael.rows.every((r) => r.property !== "2201 Hillside Avenue")).toBe(true);
+  });
+
+  it("includes a fictional business acquisition in due diligence (beta)", async () => {
+    const h = await createTestHarness({ seed: true });
+    const tx = (await h.db.transactions.get(DEMO_BUSINESS_TRANSACTION_ID))!;
+    expect(tx).toMatchObject({ type: "business_acquisition", jurisdiction: "US-BUSINESS", state: "financing_pending" });
+    const company = (await h.db.companies.get(tx.companyId!))!;
+    expect(company.legalName).toBe("Blue Harbor Coffee Roasters, LLC");
+    const ctx = await h.as("amara.okafor");
+    const s = (await loadSnapshot(ctx, tx.id))!;
+    expect(dealSubject(s)).toMatchObject({ kind: "company", title: "Blue Harbor Coffee" });
+    const timeline = buildTimeline(s);
+    expect(timeline[0]).toMatchObject({ label: "LOI signed", complete: true });
+    expect(timeline.find((m) => m.current)?.label).toBe("Financing approved");
+    // The accountant can see the deal but not its money.
+    const grace = await h.as("grace.liu");
+    const gs = (await loadSnapshot(grace, tx.id))!;
+    expect(gs.participants.find((p) => p.userId === h.userId("grace.liu"))?.role).toBe("accountant");
   });
 });

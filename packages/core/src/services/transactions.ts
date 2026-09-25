@@ -19,7 +19,7 @@ import {
   UpdateTaskStatusInput as TaskStatusSchema,
   type MilestoneKey,
 } from "@sagolik/types";
-import { findTransition, getJurisdiction, isTerminal, type TransactionSnapshot } from "@sagolik/workflow";
+import { dealSubject, findTransition, getJurisdiction, isTerminal, type TransactionSnapshot } from "@sagolik/workflow";
 import { type ServiceContext, requireUser } from "../context";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../errors";
 import { audit, emit } from "../events";
@@ -43,6 +43,20 @@ const MILESTONE_OWNERS: Record<MilestoneKey, ParticipantRole> = {
   ownership_transferred: "title_officer",
 };
 
+const BUSINESS_MILESTONE_OWNERS: Record<MilestoneKey, ParticipantRole> = {
+  offer_accepted: "broker",
+  transaction_opened: "broker",
+  identity_verified: "buyer",
+  documents_received: "broker",
+  financing_approved: "loan_officer",
+  inspection_completed: "accountant",
+  title_cleared: "attorney",
+  signing_complete: "attorney",
+  funds_received: "buyer",
+  recording_submitted: "attorney",
+  ownership_transferred: "attorney",
+};
+
 // ----------------------------------------------------------------------------- create
 
 export async function createTransaction(ctx: ServiceContext, raw: CreateTransactionInput): Promise<Transaction> {
@@ -56,6 +70,10 @@ export async function createTransaction(ctx: ServiceContext, raw: CreateTransact
     throw badRequest(`${jurisdiction.name} isn't available yet.`);
   }
   if (input.property.country !== jurisdiction.country) throw badRequest("The property's country doesn't match the jurisdiction.");
+  const business = input.type === "business_acquisition";
+  if (business !== (jurisdiction.vertical === "business")) {
+    throw badRequest(business ? "Choose the business acquisition workflow for this deal." : "That workflow is for business acquisitions.");
+  }
 
   const now = nowIso(ctx);
   const property = await ctx.writer.properties.insert({
@@ -70,7 +88,7 @@ export async function createTransaction(ctx: ServiceContext, raw: CreateTransact
     latitude: null,
     longitude: null,
     parcelId: null,
-    propertyType: input.property.propertyType,
+    propertyType: business ? "business_premises" : input.property.propertyType,
     yearBuilt: null,
     livingArea: null,
     areaUnit: jurisdiction.country === "US" ? "sqft" : "sqm",
@@ -88,7 +106,8 @@ export async function createTransaction(ctx: ServiceContext, raw: CreateTransact
   });
 
   // Enrich from a property-data provider where one covers this market. Never invent data.
-  try {
+  // (Not for business premises: residential property data doesn't describe them.)
+  if (!business) try {
     const details = await ctx.providers.property.lookup({
       line1: property.addressLine1,
       city: property.city,
@@ -104,10 +123,31 @@ export async function createTransaction(ctx: ServiceContext, raw: CreateTransact
     ctx.log.warn("property lookup failed", { error: String(e) });
   }
 
+  const company = input.company
+    ? await ctx.writer.companies.insert({
+        id: newId(),
+        organizationId: input.organizationId,
+        legalName: input.company.legalName,
+        tradeName: input.company.tradeName ?? null,
+        entityType: input.company.entityType,
+        stateOfFormation: input.company.stateOfFormation,
+        industry: input.company.industry,
+        description: input.company.description ?? null,
+        employeeCount: input.company.employeeCount ?? null,
+        annualRevenue: input.company.annualRevenue ?? null,
+        dealStructure: input.company.dealStructure,
+        website: null,
+        currency: input.currency,
+        createdAt: now,
+        updatedAt: now,
+      })
+    : null;
+
   const tx = await ctx.writer.transactions.insert({
     id: newId(),
     organizationId: input.organizationId,
     propertyId: property.id,
+    companyId: company?.id ?? null,
     reference: transactionReference(ctx.now()),
     type: input.type,
     state: "draft",
@@ -144,7 +184,7 @@ export async function createTransaction(ctx: ServiceContext, raw: CreateTransact
       id: newId(),
       transactionId: tx.id,
       key,
-      ownerRole: MILESTONE_OWNERS[key],
+      ownerRole: (business ? BUSINESS_MILESTONE_OWNERS : MILESTONE_OWNERS)[key],
       dueDate: key === "ownership_transferred" ? (input.expectedClosingDate ?? null) : null,
       completedAt: null,
       createdAt: now,
@@ -169,8 +209,10 @@ export async function createTransaction(ctx: ServiceContext, raw: CreateTransact
   });
 
   await createTaskRow(ctx, tx.id, {
-    title: "Upload the accepted purchase agreement",
-    description: "Add the signed offer / purchase agreement so every party works from the same terms.",
+    title: business ? "Upload the signed letter of intent" : "Upload the accepted purchase agreement",
+    description: business
+      ? "Add the signed LOI so every party works from the same headline terms."
+      : "Add the signed offer / purchase agreement so every party works from the same terms.",
     assigneeParticipantId: creator.id,
     actionKind: "upload_document",
     milestoneKey: "offer_accepted",
@@ -264,7 +306,7 @@ export async function updateTransaction(ctx: ServiceContext, transactionId: stri
       transactionId,
       kind: "closing_date_changed",
       title: "Closing date changed",
-      body: `The expected closing date for ${s.property.addressLine1} is now ${patch.expectedClosingDate ?? "to be confirmed"}.`,
+      body: `The expected closing date for ${dealSubject(s).title} is now ${patch.expectedClosingDate ?? "to be confirmed"}.`,
       linkPath: `/app/transactions/${transactionId}`,
     });
   }
@@ -328,8 +370,8 @@ export async function inviteParticipant(ctx: ServiceContext, transactionId: stri
   await emit(ctx, { type: "participant.invited", aggregateType: "participant", aggregateId: participant.id, transactionId, payload: { role: input.role } });
   await ctx.providers.email.send({
     to: input.email,
-    subject: `You're invited to the closing for ${s.property.addressLine1}`,
-    text: `${actor.displayName} invited you to join the transaction for ${s.property.addressLine1}, ${s.property.city} as ${input.role.replace(/_/g, " ")} on Sagolik Close.\n\nSign in with this email address to get started: ${new URL("/sign-in", ctx.env.APP_URL)}`,
+    subject: `You're invited to the closing for ${dealSubject(s).title}`,
+    text: `${actor.displayName} invited you to join the closing for ${dealSubject(s).title} (${dealSubject(s).subtitle}) as ${input.role.replace(/_/g, " ")} on Sagolik Close.\n\nSign in with this email address to get started: ${new URL("/sign-in", ctx.env.APP_URL)}`,
   });
   await postSystemMessage(ctx, transactionId, `${input.displayName} was invited as ${input.role.replace(/_/g, " ")}.`, { type: "participant", id: participant.id });
 

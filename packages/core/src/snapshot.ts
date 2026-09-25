@@ -33,6 +33,7 @@ export async function loadSnapshot(ctx: ServiceContext, transactionId: string, d
     titleCase,
     titleIssues,
     recording,
+    company,
   ] = await Promise.all([
     db.properties.get(transaction.propertyId),
     db.transaction_participants.find(where, { orderBy: "createdAt" }),
@@ -52,13 +53,16 @@ export async function loadSnapshot(ctx: ServiceContext, transactionId: string, d
     db.title_cases.findOne(where),
     db.title_issues.find(where),
     db.recordings.findOne(where),
+    transaction.companyId ? db.companies.get(transaction.companyId) : Promise.resolve(null),
   ]);
   if (!property) return null;
+  if (transaction.companyId && !company) return null;
   const taskIds = tasks.map((t) => t.id);
   const taskDependencies = taskIds.length ? await db.task_dependencies.find({ taskId: taskIds }) : [];
   return {
     transaction,
     property,
+    company,
     participants,
     milestones,
     tasks,

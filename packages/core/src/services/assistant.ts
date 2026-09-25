@@ -14,7 +14,7 @@
  * tools, filtered by the asking person's permissions.
  */
 import { can } from "@sagolik/auth";
-import { buildTimeline, closingBlockers, currentPhase, documentSummary, nextActionFor, progressPercent } from "@sagolik/workflow";
+import { buildTimeline, closingBlockers, currentPhase, dealSubject, documentSummary, nextActionFor, progressPercent } from "@sagolik/workflow";
 import { type ServiceContext, requireUser } from "../context";
 import { audit } from "../events";
 import { accessContext, loadAuthorized } from "../snapshot";
@@ -176,7 +176,7 @@ export async function askAssistant(ctx: ServiceContext, transactionId: string, q
     default: {
       const phase = currentPhase(timeline);
       return answer({
-        answer: `${s.property.addressLine1} is ${progressPercent(timeline)}% complete. Current stage: ${STATE_LABELS[s.transaction.state].label}${phase ? ` — next milestone: ${phase.label}` : ""}.`,
+        answer: `${dealSubject(s).title} is ${progressPercent(timeline)}% complete. Current stage: ${STATE_LABELS[s.transaction.state].label}${phase ? ` — next milestone: ${phase.label}` : ""}.`,
         bullets: phase ? [phase.detail] : [],
         sources: [{ label: "View timeline", href: base }],
       });

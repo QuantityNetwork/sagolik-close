@@ -143,6 +143,8 @@ export const ROLE_PERMISSIONS: Record<ParticipantRole, readonly Permission[]> = 
     "audit.view",
     "audit.export",
   ],
+  // Due-diligence accountant (e.g. quality of earnings): documents and messages, no money access.
+  accountant: ["transaction.view", "document.upload", "document.view", "task.complete_own", "message.send"],
 };
 
 /** Organization-scoped grants over every transaction owned by that organization. */

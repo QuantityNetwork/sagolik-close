@@ -6,7 +6,7 @@
  * happened. No transaction state lives inside AI prompts.
  */
 import type { TransactionState } from "@sagolik/types";
-import { type FactKey, type FactResult, evaluateAllFacts, FACTS } from "./facts";
+import { type FactKey, type FactResult, evaluateAllFacts, FACTS, factLabel } from "./facts";
 import type { TransactionSnapshot } from "./snapshot";
 
 export type RuleEffect =
@@ -71,7 +71,7 @@ export interface RuleEvaluation {
 export function evaluateRules(s: TransactionSnapshot, rules: Rule[] = RULES): RuleEvaluation[] {
   const facts = evaluateAllFacts(s);
   return rules.map((rule) => {
-    const conditions = rule.when.map((fact) => ({ fact, label: FACTS[fact].label, ...facts[fact] }));
+    const conditions = rule.when.map((fact) => ({ fact, label: factLabel(s, fact), ...facts[fact] }));
     return { rule, satisfied: conditions.every((c) => c.value), conditions };
   });
 }
@@ -84,6 +84,6 @@ export function capabilityEnabled(s: TransactionSnapshot, capability: string): b
 
 export function recordingReadiness(s: TransactionSnapshot) {
   const facts = evaluateAllFacts(s);
-  const items = RECORDING_REQUIREMENTS.map((fact) => ({ fact, label: FACTS[fact].label, ...facts[fact] }));
+  const items = RECORDING_REQUIREMENTS.map((fact) => ({ fact, label: factLabel(s, fact), ...facts[fact] }));
   return { ready: items.every((i) => i.value), items };
 }

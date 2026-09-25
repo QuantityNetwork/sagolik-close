@@ -54,12 +54,20 @@ export const DEMO_PERSONAS: DemoPersona[] = [
   persona("priya.shah", "Priya Shah", "Title officer", "Title officer at Maple Title & Escrow (demo).", "/app/command-center"),
   persona("ethan.walker", "Ethan Walker", "Seller's agent", "Listing agent for 1234 Maple Ridge Drive.", "/app/command-center"),
   persona("mia.rodriguez", "Mia Rodriguez", "Homeowner", "Closed on 2201 Hillside Avenue last month — see the Home Record.", "/app/ownership"),
+  // Business acquisition (beta) — all people and companies are fictional.
+  persona("amara.okafor", "Amara Okafor", "Business buyer", "Buying Blue Harbor Coffee Roasters (fictional) with acquisition financing."),
+  persona("tom.becker", "Tom Becker", "Business seller", "Founder selling Blue Harbor Coffee Roasters (fictional)."),
+  persona("rachel.kim", "Rachel Kim", "M&A advisor", "Advisor at Kim Business Advisors (demo), running the sale.", "/app/command-center"),
+  persona("david.chen", "David Chen", "Deal counsel", "Buyer's counsel at Chen Legal (demo); confirms the ownership transfer.", "/app/command-center"),
+  persona("grace.liu", "Grace Liu", "Accountant", "Quality-of-earnings accountant at Liu & Partners CPAs (demo).", "/app/command-center"),
   persona("admin", "Sagolik Operations (demo)", "Platform admin", "Internal Sagolik admin console. No implicit access to transaction data.", "/admin"),
 ];
 
 const P = Object.fromEntries(DEMO_PERSONAS.map((p) => [p.key, p])) as Record<string, DemoPersona>;
 
 export const DEMO_TRANSACTION_ID = did("tx:maple");
+/** The fictional business acquisition (beta). */
+export const DEMO_BUSINESS_TRANSACTION_ID = did("tx:blueharbor");
 
 export type DemoRows = { [K in TableName]?: Array<Row<K>> };
 
@@ -117,6 +125,9 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
     realty: { id: did("org:realty"), name: "Morgan & Co. Realty (Demo)", slug: "morgan-co-realty-demo", type: "real_estate_agency" as const },
     title: { id: did("org:title"), name: "Maple Title & Escrow (Demo)", slug: "maple-title-escrow-demo", type: "title_company" as const },
     lender: { id: did("org:lender"), name: "Harbor Lending (Demo)", slug: "harbor-lending-demo", type: "mortgage_lender" as const },
+    advisory: { id: did("org:advisory"), name: "Kim Business Advisors (Demo)", slug: "kim-business-advisors-demo", type: "ma_advisory" as const },
+    law: { id: did("org:law"), name: "Chen Legal (Demo)", slug: "chen-legal-demo", type: "law_firm" as const },
+    accounting: { id: did("org:accounting"), name: "Liu & Partners CPAs (Demo)", slug: "liu-partners-cpas-demo", type: "accounting_firm" as const },
   };
   for (const o of Object.values(orgs)) {
     add("organizations", { ...o, jurisdiction: "US-TX", ...base(-90) });
@@ -130,6 +141,9 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
   member(orgs.title.id, "marcus.lee", "organization_admin");
   member(orgs.title.id, "priya.shah", "member");
   member(orgs.lender.id, "michael.reed", "organization_admin");
+  member(orgs.advisory.id, "rachel.kim", "organization_admin");
+  member(orgs.law.id, "david.chen", "organization_admin");
+  member(orgs.accounting.id, "grace.liu", "organization_admin");
 
   add("plans", { id: did("plan:consumer"), key: "consumer", name: "Consumer", audience: "consumer", priceMonthly: null, currency: "USD", features: ["Invited by your agent or escrow", "Your closing, documents and money in one place", "Home Record after closing"], active: true, sortOrder: 1, ...base(-90) });
   add("plans", { id: did("plan:professional"), key: "professional", name: "Professional", audience: "professional", priceMonthly: null, currency: "USD", features: ["Transaction workspaces", "Command center across your files", "E-signature and identity checks through connected providers"], active: true, sortOrder: 2, ...base(-90) });
@@ -190,6 +204,7 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
       id,
       organizationId: orgs.realty.id,
       propertyId,
+      companyId: null,
       reference: `SC-DEMO-${spec.key.toUpperCase()}`,
       type: "purchase",
       state: spec.state,
@@ -667,6 +682,86 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
   event(H, "recording_pending", "ownership_transfer", -20, "Automatic: every requirement for \"ownership_transfer\" is met.", null);
   event(H, "ownership_transfer", "closed", -19, "Disbursement confirmed; file closed.", u("marcus.lee"));
 
+  // ------------------------------------------------------------------ 5. Blue Harbor Coffee Roasters — business acquisition (beta), in due diligence
+  {
+    const K = "blueharbor";
+    const X = DEMO_BUSINESS_TRANSACTION_ID;
+    const premisesId = did(`prop:${K}`);
+    const companyId = did(`company:${K}`);
+    add("properties", {
+      id: premisesId, organizationId: orgs.advisory.id, addressLine1: "410 Harbor Street", addressLine2: "Unit B", city: "Galveston", region: "TX", postalCode: "77550",
+      country: "US", latitude: null, longitude: null, parcelId: null, propertyType: "business_premises", yearBuilt: null, livingArea: 5200, areaUnit: "sqft",
+      bedrooms: null, bathrooms: null, lotSize: null, imageUrls: [], propertyTaxAnnual: null, hoaMonthly: null, energyRating: null,
+      legalDescription: "Leased roastery and warehouse space (fictional)", currency: "USD", ...base(-40),
+    });
+    add("companies", {
+      id: companyId, organizationId: orgs.advisory.id, legalName: "Blue Harbor Coffee Roasters, LLC", tradeName: "Blue Harbor Coffee", entityType: "llc",
+      stateOfFormation: "TX", industry: "Specialty coffee roasting and wholesale",
+      description: "Fictional demo company: roasts and sells specialty coffee to cafés and grocers along the Gulf Coast.",
+      employeeCount: 14, annualRevenue: 180_000_000, dealStructure: "asset_purchase", website: null, currency: "USD", ...base(-40),
+    });
+    add("transactions", {
+      id: X, organizationId: orgs.advisory.id, propertyId: premisesId, companyId, reference: "SC-DEMO-BLUEHARBOR", type: "business_acquisition",
+      state: "financing_pending", jurisdiction: "US-BUSINESS", currency: "USD", salePrice: 145_000_000, expectedClosingDate: date(38),
+      coordinatorId: u("rachel.kim"), createdBy: u("rachel.kim"), stateChangedAt: day(-3), closedAt: null, version: 6, ...base(-35),
+    });
+    const bp = (role: Row<"transaction_participants">["role"], key: string, orgId: string | null = null) =>
+      add("transaction_participants", {
+        id: did(`part:${K}:${role}`), transactionId: X, userId: P[key]!.userId, organizationId: orgId, role, displayName: P[key]!.name, email: P[key]!.email,
+        status: "active", invitedBy: u("rachel.kim"), joinedAt: day(-34), ...base(-35),
+      });
+    const b = {
+      broker: bp("broker", "rachel.kim", orgs.advisory.id),
+      buyer: bp("buyer", "amara.okafor"),
+      seller: bp("seller", "tom.becker"),
+      counsel: bp("attorney", "david.chen", orgs.law.id),
+      accountant: bp("accountant", "grace.liu", orgs.accounting.id),
+      lender: bp("loan_officer", "michael.reed", orgs.lender.id),
+      escrow: bp("escrow_officer", "marcus.lee", orgs.title.id),
+    };
+    const bOwners: Record<string, Row<"transaction_participants">["role"]> = {
+      offer_accepted: "broker", transaction_opened: "broker", identity_verified: "buyer", documents_received: "broker", financing_approved: "loan_officer",
+      inspection_completed: "accountant", title_cleared: "attorney", signing_complete: "attorney", funds_received: "buyer", recording_submitted: "attorney", ownership_transferred: "attorney",
+    };
+    const bDues: Record<string, number> = { documents_received: -2, financing_approved: 20, inspection_completed: 12, title_cleared: 25, signing_complete: 36, funds_received: 37, recording_submitted: 38, ownership_transferred: 38 };
+    for (const [key, role] of Object.entries(bOwners)) {
+      add("transaction_milestones", { id: did(`ms:${K}:${key}`), transactionId: X, key: key as Row<"transaction_milestones">["key"], ownerRole: role, dueDate: key in bDues ? date(bDues[key]!) : null, completedAt: null, ...base(-35) });
+    }
+    add("message_threads", { id: did(`room:${K}`), transactionId: X, kind: "transaction_room", title: "Deal room", memberUserIds: [], ...base(-35) });
+    verifyId(K, X, b.buyer);
+    verifyId(K, X, b.seller);
+    const up = (key: string) => ({ uploadedBy: u(key) });
+    doc(K, X, "Letter of Intent (signed)", "letter_of_intent", { signatureStatus: "completed", offset: -34, ...up("rachel.kim") });
+    doc(K, X, "Mutual NDA", "other", { signatureStatus: "completed", offset: -36, ...up("rachel.kim") });
+    doc(K, X, "Financial statements 2023–2025 (seller-provided)", "tax", { offset: -30, accessLevel: "principals_and_professionals", ...up("tom.becker") });
+    doc(K, X, "Quality of Earnings report — draft", "due_diligence_report", { status: "pending_review", offset: -3, accessLevel: "principals_and_professionals", ...up("grace.liu") });
+    doc(K, X, "Disclosure schedules — draft", "disclosure_schedules", { status: "pending_review", offset: -5, ...up("david.chen") });
+    doc(K, X, "Asset Purchase Agreement — draft v3", "definitive_agreement", { status: "pending_review", signatureStatus: "draft", offset: -2, ...up("david.chen") });
+    doc(K, X, "Roastery lease (current)", "other", { offset: -29, ...up("tom.becker") });
+    add("mortgages", {
+      id: did(`mortgage:${K}`), transactionId: X, lenderName: "Harbor Lending (Demo)", loanOfficerParticipantId: b.lender.id, loanAmount: 116_000_000, currency: "USD",
+      interestRateBps: null, termMonths: 120, loanType: "Business acquisition term loan", ltvBps: 8000, status: "underwriting", appraisalStatus: "ordered",
+      underwritingStatus: "in_review", clearToCloseAt: null, fundedAt: null, provider: "manual_mortgage", externalReference: "HL-DEMO-BIZ-2231", ...base(-20),
+    });
+    for (const [c, done] of [["Signed asset purchase agreement", false], ["Business valuation", false], ["Buyer's personal financial statement", true], ["Landlord consent to lease assignment", false]] as const) {
+      add("mortgage_conditions", { id: did(`mc:${K}:${c}`), mortgageId: did(`mortgage:${K}`), transactionId: X, description: c, satisfied: done, satisfiedAt: done ? day(-6) : null, ...base(-18) });
+    }
+    add("title_cases", { id: did(`title:${K}`), transactionId: X, titleCompany: "Chen Legal (Demo) — UCC and tax lien search", status: "searching", currentOwner: "Blue Harbor Coffee Roasters, LLC", searchCompletedAt: null, clearedAt: null, insurancePolicyNumber: null, provider: "manual_title", externalReference: "CL-DEMO-LIEN-58", ...base(-4) });
+    task(K, X, "Finish quality-of-earnings review", { actionKind: "review_document", milestoneKey: "inspection_completed", assigneeParticipantId: b.accountant.id, priority: "high", dueDate: date(12), createdBy: u("rachel.kim") });
+    task(K, X, "Review disclosure schedules with seller", { actionKind: "review_document", milestoneKey: "documents_received", assigneeParticipantId: b.counsel.id, dueDate: date(9), createdBy: u("rachel.kim") });
+    task(K, X, "Get landlord consent to assign the roastery lease", { actionKind: "generic", milestoneKey: "financing_approved", assigneeParticipantId: b.seller.id, priority: "high", dueDate: date(15), createdBy: u("rachel.kim") });
+    task(K, X, "Upload personal financial statement for the lender", { actionKind: "upload_document", milestoneKey: "financing_approved", assigneeParticipantId: b.buyer.id, status: "complete", completedAt: day(-6), completedBy: u("amara.okafor"), createdBy: u("michael.reed") });
+    for (const [from, to, off, reason] of [
+      ["draft", "invited", -34, "Deal room opened; parties invited."],
+      ["invited", "identity_pending", -33, "Automatic: every requirement for \"identity_pending\" is met."],
+      ["identity_pending", "documents_pending", -25, "Automatic: every requirement for \"documents_pending\" is met."],
+      ["documents_pending", "financing_pending", -3, "Diligence documents received; financing underway."],
+    ] as const) event(X, from, to, off, reason, from === "draft" ? u("rachel.kim") : null);
+    sysMsg(K, X, "Deal room opened by Rachel Kim. Everything for this acquisition — diligence, financing, signatures and closing — is tracked here.", -34);
+    sysMsg(K, X, "Grace Liu uploaded a draft Quality of Earnings report for review.", -3);
+    add("notifications", { id: did("n:amara:qoe"), userId: u("amara.okafor"), transactionId: X, kind: "status_update", title: "Due diligence update", body: "A draft Quality of Earnings report is ready for review by your advisors.", linkPath: `/app/transactions/${X}/documents`, channel: "in_app", readAt: null, sentAt: day(-3), createdAt: day(-3) });
+  }
+
   // ------------------------------------------------------------------ notifications for the buyer
   add("notifications", { id: did("n:olivia:cd"), userId: u("olivia.carter"), transactionId: M, kind: "signature_requested", title: "Closing Disclosure is ready for your signature", body: "Please review and sign the Closing Disclosure. It takes about three minutes.", linkPath: `/app/transactions/${M}/documents`, channel: "in_app", readAt: null, sentAt: day(-1), createdAt: day(-1) });
   add("notifications", { id: did("n:olivia:ctc"), userId: u("olivia.carter"), transactionId: M, kind: "status_update", title: "Update on 1234 Maple Ridge Drive", body: "Your closing documents are being prepared for signing.", linkPath: `/app/transactions/${M}`, channel: "in_app", readAt: day(-2), sentAt: day(-2), createdAt: day(-2) });
@@ -710,6 +805,7 @@ export const SEED_ORDER: TableName[] = [
   "organization_branding",
   "plans",
   "properties",
+  "companies",
   "transactions",
   "transaction_participants",
   "transaction_milestones",

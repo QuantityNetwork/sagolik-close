@@ -132,10 +132,31 @@ export const Property = z.object({
 });
 export type Property = z.infer<typeof Property>;
 
+export const Company = z.object({
+  ...base,
+  organizationId: nullable(Uuid),
+  legalName: z.string().min(2).max(200),
+  tradeName: nullable(z.string().max(200)),
+  entityType: z.enum(["llc", "c_corporation", "s_corporation", "partnership", "sole_proprietorship"]),
+  stateOfFormation: z.string().regex(/^[A-Z]{2}$/),
+  industry: z.string().min(2).max(120),
+  description: nullable(z.string().max(2000)),
+  employeeCount: nullable(z.number().int().nonnegative()),
+  /** As reported by the seller; verified (or not) during due diligence. */
+  annualRevenue: nullable(MinorUnits),
+  dealStructure: z.enum(["asset_purchase", "stock_purchase", "membership_interest_purchase"]),
+  website: nullable(z.string().regex(/^https:\/\//)),
+  currency: Currency,
+});
+export type Company = z.infer<typeof Company>;
+
 export const Transaction = z.object({
   ...base,
   organizationId: Uuid,
+  /** Real estate: the property. Business acquisitions: the business premises. */
   propertyId: Uuid,
+  /** Business acquisitions only: the company being bought. */
+  companyId: nullable(Uuid),
   reference: z.string(),
   type: TransactionType,
   state: TransactionState,
@@ -866,6 +887,7 @@ export const TABLE_SCHEMAS = {
   organization_settings: OrganizationSettings,
   organization_branding: OrganizationBranding,
   properties: Property,
+  companies: Company,
   transactions: Transaction,
   transaction_participants: TransactionParticipant,
   transaction_events: TransactionEvent,

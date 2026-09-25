@@ -32,7 +32,7 @@ export const TRANSACTION_STATES = [
 export const TransactionState = e(TRANSACTION_STATES).schema;
 export type TransactionState = (typeof TRANSACTION_STATES)[number];
 
-export const TRANSACTION_TYPES = ["purchase", "sale", "refinance", "ownership_transfer"] as const;
+export const TRANSACTION_TYPES = ["purchase", "sale", "refinance", "ownership_transfer", "business_acquisition"] as const;
 export const TransactionType = e(TRANSACTION_TYPES).schema;
 export type TransactionType = (typeof TRANSACTION_TYPES)[number];
 
@@ -54,6 +54,7 @@ export const PARTICIPANT_ROLES = [
   "insurance_agent",
   "transaction_coordinator",
   "auditor",
+  "accountant",
 ] as const;
 export const ParticipantRole = e(PARTICIPANT_ROLES).schema;
 export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
@@ -72,6 +73,8 @@ export const ORGANIZATION_TYPES = [
   "developer",
   "property_company",
   "brokerage",
+  "ma_advisory",
+  "accounting_firm",
 ] as const;
 export const OrganizationType = e(ORGANIZATION_TYPES).schema;
 export type OrganizationType = (typeof ORGANIZATION_TYPES)[number];
@@ -105,6 +108,14 @@ export const DOCUMENT_CATEGORIES = [
   "notary",
   "recording",
   "other",
+  "letter_of_intent",
+  "due_diligence_report",
+  "definitive_agreement",
+  "disclosure_schedules",
+  "lien_search",
+  "transfer_instrument",
+  "funds_flow_memo",
+  "closing_certificate",
 ] as const;
 export const DocumentCategory = e(DOCUMENT_CATEGORIES).schema;
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];

@@ -5,6 +5,8 @@ import {
   capabilityEnabled,
   checkTransition,
   closingBlockers,
+  dealSubject,
+  evaluateAllFacts,
   evaluateRules,
   getJurisdiction,
   JURISDICTIONS,
@@ -31,8 +33,9 @@ function snapshot(state: Transaction["state"], patch: Partial<TransactionSnapsho
   const buyer = participant("buyer");
   const seller = participant("seller");
   return {
-    transaction: { id: "t", organizationId: "o", propertyId: "p", reference: "R", type: "purchase", state, jurisdiction: "US-TX", currency: "USD", salePrice: 100, expectedClosingDate: "2026-02-01", coordinatorId: null, createdBy: "u", stateChangedAt: T0, closedAt: null, version: 1, createdAt: T0, updatedAt: T0 },
+    transaction: { id: "t", organizationId: "o", propertyId: "p", companyId: null, reference: "R", type: "purchase", state, jurisdiction: "US-TX", currency: "USD", salePrice: 100, expectedClosingDate: "2026-02-01", coordinatorId: null, createdBy: "u", stateChangedAt: T0, closedAt: null, version: 1, createdAt: T0, updatedAt: T0 },
     property: { id: "p", organizationId: null, addressLine1: "1 A St", addressLine2: null, city: "Austin", region: "TX", postalCode: null, country: "US", latitude: null, longitude: null, parcelId: null, propertyType: "sf", yearBuilt: null, livingArea: null, areaUnit: "sqft", bedrooms: null, bathrooms: null, lotSize: null, imageUrls: [], propertyTaxAnnual: null, hoaMonthly: null, energyRating: null, legalDescription: null, currency: "USD", createdAt: T0, updatedAt: T0 },
+    company: null,
     participants: [buyer, seller],
     milestones: [],
     tasks: [],
@@ -156,5 +159,65 @@ describe("jurisdictions", () => {
     expect(getJurisdiction("DE").signatures.notaryRequiredForDeed).toBe(true);
     expect(getJurisdiction("SE").milestones).not.toContain("title_cleared");
     expect(() => getJurisdiction("XX")).toThrow();
+  });
+});
+
+describe("business acquisition profile (beta)", () => {
+  const company = {
+    id: "c", organizationId: null, legalName: "Blue Harbor Coffee Roasters, LLC", tradeName: "Blue Harbor Coffee", entityType: "llc" as const,
+    stateOfFormation: "TX", industry: "Specialty coffee roasting", description: null, employeeCount: 14, annualRevenue: 180_000_000,
+    dealStructure: "asset_purchase" as const, website: null, currency: "USD" as const, createdAt: T0, updatedAt: T0,
+  };
+  const biz = (patch: Partial<TransactionSnapshot> = {}) => {
+    const base = snapshot("documents_pending", patch);
+    return { ...base, company, transaction: { ...base.transaction, type: "business_acquisition" as const, companyId: "c", jurisdiction: "US-BUSINESS" }, ...patch };
+  };
+
+  it("uses the business vocabulary, documents and owners", () => {
+    const j = getJurisdiction("US-BUSINESS");
+    expect(j.vertical).toBe("business");
+    const facts = evaluateAllFacts(biz());
+    expect(facts.purchase_agreement_signed).toMatchObject({ value: false, responsibleRole: "attorney" });
+    expect(facts.purchase_agreement_signed.detail).toContain("definitive agreement");
+    expect(facts.inspection_completed).toMatchObject({ value: false, responsibleRole: "accountant" });
+    expect(facts.inspection_completed.detail).toContain("due diligence report");
+    expect(facts.deed_signed.detail).toContain("transfer documents");
+
+    const signed = evaluateAllFacts(biz({ documents: [document("definitive_agreement", { signatureStatus: "completed" }), document("due_diligence_report")] }));
+    expect(signed.purchase_agreement_signed.value).toBe(true);
+    expect(signed.inspection_completed.value).toBe(true);
+    // A real-estate purchase agreement doesn't satisfy a business deal.
+    expect(evaluateAllFacts(biz({ documents: [document("purchase_agreement", { signatureStatus: "completed" })] })).purchase_agreement_signed.value).toBe(false);
+  });
+
+  it("labels the timeline and requirements for a business deal", () => {
+    const tl = buildTimeline(biz(), "2026-01-01");
+    expect(tl.map((m) => m.label)).toEqual([
+      "LOI signed", "Deal room opened", "Parties verified", "Diligence documents in", "Financing approved", "Due diligence complete",
+      "Lien search clear", "Closing documents signed", "Funds received", "Closing filings submitted", "Ownership transferred",
+    ]);
+    expect(tl[0]!.detail).toBe("Upload the signed letter of intent.");
+    expect(buildTimeline(biz({ documents: [document("letter_of_intent")] }), "2026-01-01")[0]!.complete).toBe(true);
+    const readiness = recordingReadiness(biz());
+    expect(readiness.items.map((i) => i.label)).toContain("Transfer documents signed");
+    expect(readiness.items.map((i) => i.label)).not.toContain("Deed signed");
+  });
+
+  it("keeps real estate wording unchanged", () => {
+    const f = evaluateAllFacts(snapshot("documents_pending"));
+    expect(f.purchase_agreement_signed.detail).toBe("The purchase agreement still needs every signature.");
+    expect(f.deed_signed.detail).toBe("The deed hasn't been signed.");
+    expect(recordingReadiness(snapshot("documents_pending")).items.map((i) => i.label)).toContain("Deed signed");
+  });
+
+  it("describes the deal subject", () => {
+    expect(dealSubject(biz())).toMatchObject({ kind: "company", title: "Blue Harbor Coffee" });
+    expect(dealSubject(biz()).subtitle).toContain("LLC");
+    expect(dealSubject(snapshot("draft"))).toMatchObject({ kind: "property", title: "1 A St" });
+  });
+
+  it("confirms ownership only from counsel's confirmation reference", () => {
+    const pending = evaluateAllFacts(biz({ recording: null }));
+    expect(pending.ownership_recorded).toMatchObject({ value: false, responsibleRole: "attorney" });
   });
 });

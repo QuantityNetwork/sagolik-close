@@ -6,6 +6,7 @@
 import type { TransactionState } from "@sagolik/types";
 import {
   FACTS,
+  factLabel,
   type FactKey,
   type TransactionSnapshot,
   assertTransition,
@@ -107,7 +108,7 @@ async function syncRequirements(ctx: ServiceContext, s: TransactionSnapshot) {
         id: newId(),
         transactionId: s.transaction.id,
         key,
-        label: FACTS[key].label,
+        label: factLabel(s, key),
         satisfied: f.value,
         satisfiedAt: f.value ? nowIso(ctx) : null,
         evidenceEntityType: null,

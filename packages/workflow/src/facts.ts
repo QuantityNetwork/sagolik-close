@@ -44,6 +44,10 @@ const SIGNATURE_DONE = new Set(["completed", "not_required"]);
 
 type FactFn = (s: TransactionSnapshot) => FactResult;
 
+/** The deal's workflow profile: vertical, vocabulary, document roles and step owners. */
+const profile = (s: TransactionSnapshot) => getJurisdiction(s.transaction.jurisdiction);
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
+
 const docsOf = (s: TransactionSnapshot, category: string) =>
   s.documents.filter((d) => d.category === category && d.status !== "superseded" && d.status !== "rejected");
 
@@ -68,10 +72,11 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
   purchase_agreement_signed: {
     label: "Purchase agreement signed",
     evaluate: (s) => {
-      const signed = docsOf(s, "purchase_agreement").some((d) => d.signatureStatus === "completed");
+      const j = profile(s);
+      const signed = docsOf(s, j.documentRoles.agreement).some((d) => d.signatureStatus === "completed");
       return signed
-        ? { value: true, detail: "The purchase agreement is fully signed." }
-        : { value: false, detail: "The purchase agreement still needs every signature.", responsibleRole: "buyer_agent" };
+        ? { value: true, detail: `The ${j.vocabulary.agreement} is fully signed.` }
+        : { value: false, detail: `The ${j.vocabulary.agreement} still needs every signature.`, responsibleRole: j.stepOwners.agreement };
     },
   },
   documents_received: {
@@ -87,7 +92,7 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
   financing_approved: {
     label: "Financing approved",
     evaluate: (s) => {
-      if (!s.mortgage) return { value: true, detail: "No mortgage on this transaction." };
+      if (!s.mortgage) return { value: true, detail: `No ${profile(s).vocabulary.financing} on this ${profile(s).vertical === "business" ? "deal" : "transaction"}.` };
       const ok = ["conditional_approval", "clear_to_close", "funded"].includes(s.mortgage.status);
       return ok
         ? { value: true, detail: `${s.mortgage.lenderName} has approved the loan.` }
@@ -97,7 +102,7 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
   lender_clear_to_close: {
     label: "Lender issued Clear to Close",
     evaluate: (s) => {
-      if (!s.mortgage) return { value: true, detail: "No mortgage on this transaction." };
+      if (!s.mortgage) return { value: true, detail: `No ${profile(s).vocabulary.financing} on this ${profile(s).vertical === "business" ? "deal" : "transaction"}.` };
       const ok = s.mortgage.status === "clear_to_close" || s.mortgage.status === "funded";
       const open = s.mortgageConditions.filter((c) => !c.satisfied).length;
       return ok
@@ -112,7 +117,7 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
   mortgage_funded: {
     label: "Mortgage funded",
     evaluate: (s) => {
-      if (!s.mortgage) return { value: true, detail: "No mortgage on this transaction." };
+      if (!s.mortgage) return { value: true, detail: `No ${profile(s).vocabulary.financing} on this ${profile(s).vertical === "business" ? "deal" : "transaction"}.` };
       return s.mortgage.status === "funded"
         ? { value: true, detail: "The lender has funded the loan." }
         : { value: false, detail: "The lender has not funded the loan yet.", responsibleRole: "loan_officer" };
@@ -121,35 +126,42 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
   inspection_completed: {
     label: "Inspection completed",
     evaluate: (s) => {
-      const doc = docsOf(s, "inspection").some((d) => d.status === "approved");
+      const j = profile(s);
+      const v = j.vocabulary;
+      const doc = docsOf(s, j.documentRoles.inspection).some((d) => d.status === "approved");
       const waived = s.tasks.some((t) => t.actionKind === "book_inspection" && t.status === "waived");
       return doc || waived
-        ? { value: true, detail: waived ? "The inspection was waived." : "The inspection report has been reviewed." }
-        : { value: false, detail: "The inspection report hasn't been reviewed yet.", responsibleRole: "buyer_agent" };
+        ? { value: true, detail: waived ? `The ${v.inspection} was waived.` : `The ${v.inspectionReport} has been reviewed.` }
+        : { value: false, detail: `The ${v.inspectionReport} hasn't been reviewed yet.`, responsibleRole: j.stepOwners.inspection };
     },
   },
   title_clear: {
     label: "Title is clear",
     evaluate: (s) => {
+      const j = profile(s);
+      const owner = j.stepOwners.title;
+      const business = j.vertical === "business";
       const t = s.titleCase;
-      if (!t) return { value: false, detail: "Title search hasn't started.", responsibleRole: "title_officer" };
+      if (!t) return { value: false, detail: business ? "The lien search hasn't started." : "Title search hasn't started.", responsibleRole: owner };
       const open = s.titleIssues.filter((i) => !i.resolved);
       if ((t.status === "clear" || t.status === "insured") && open.length === 0)
-        return { value: true, detail: `${t.titleCompany} has cleared title.` };
+        return { value: true, detail: business ? `${t.titleCompany} reports no open liens.` : `${t.titleCompany} has cleared title.` };
+      const noun = business ? "lien" : "title issue";
       return {
         value: false,
-        detail: open.length ? `${open.length} title issue${open.length > 1 ? "s" : ""} to resolve.` : `${t.titleCompany} is still searching title.`,
-        responsibleRole: "title_officer",
+        detail: open.length ? `${open.length} ${noun}${open.length > 1 ? "s" : ""} to resolve.` : business ? `${t.titleCompany} is still running the lien search.` : `${t.titleCompany} is still searching title.`,
+        responsibleRole: owner,
       };
     },
   },
   closing_statement_approved: {
     label: "Closing statement approved",
     evaluate: (s) => {
-      const ok = docsOf(s, "closing_statement").some((d) => d.status === "approved");
+      const j = profile(s);
+      const ok = docsOf(s, j.documentRoles.closingStatement).some((d) => d.status === "approved");
       return ok
-        ? { value: true, detail: "The closing statement is approved." }
-        : { value: false, detail: "The closing statement hasn't been approved.", responsibleRole: "escrow_officer" };
+        ? { value: true, detail: `The ${j.vocabulary.closingStatement} is approved.` }
+        : { value: false, detail: `The ${j.vocabulary.closingStatement} hasn't been approved.`, responsibleRole: "escrow_officer" };
     },
   },
   signing_complete: {
@@ -157,8 +169,9 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
     evaluate: (s) => {
       const live = s.documents.filter((d) => d.status !== "superseded" && d.status !== "rejected");
       const needs = live.filter((d) => !SIGNATURE_DONE.has(d.signatureStatus));
-      const hasDeed = live.some((d) => d.category === "deed");
-      if (!hasDeed) return { value: false, detail: "The deed hasn't been prepared yet.", responsibleRole: "title_officer" };
+      const j = profile(s);
+      const hasDeed = live.some((d) => d.category === j.documentRoles.transferInstrument);
+      if (!hasDeed) return { value: false, detail: `The ${j.vocabulary.transferInstrument} ${j.vertical === "business" ? "haven't" : "hasn't"} been prepared yet.`, responsibleRole: j.stepOwners.recording };
       return needs.length === 0
         ? { value: true, detail: "Every document has all required signatures." }
         : { value: false, detail: `${needs.length} document${needs.length > 1 ? "s" : ""} still need signatures: ${needs.map((d) => d.name).join(", ")}.`, responsibleRole: "buyer" };
@@ -166,10 +179,13 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
   },
   deed_signed: {
     label: "Deed signed",
-    evaluate: (s) =>
-      docsOf(s, "deed").some((d) => d.signatureStatus === "completed")
-        ? { value: true, detail: "The deed is signed." }
-        : { value: false, detail: "The deed hasn't been signed.", responsibleRole: "seller" },
+    evaluate: (s) => {
+      const j = profile(s);
+      const plural = j.vertical === "business";
+      return docsOf(s, j.documentRoles.transferInstrument).some((d) => d.signatureStatus === "completed")
+        ? { value: true, detail: `The ${j.vocabulary.transferInstrument} ${plural ? "are" : "is"} signed.` }
+        : { value: false, detail: `The ${j.vocabulary.transferInstrument} ${plural ? "haven't" : "hasn't"} been signed.`, responsibleRole: j.stepOwners.transferInstrument };
+    },
   },
   earnest_money_settled: {
     label: "Earnest money received",
@@ -237,7 +253,11 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
     label: "Transfer taxes paid",
     evaluate: (s) => {
       const taxes = getJurisdiction(s.transaction.jurisdiction).taxes.filter((t) => t.key !== "property_tax_proration");
-      if (taxes.length === 0) return { value: true, detail: "No transfer taxes apply in this jurisdiction." };
+      if (taxes.length === 0)
+        return {
+          value: true,
+          detail: profile(s).vertical === "business" ? "No transfer taxes are tracked for this deal; counsel handles any state tax clearance." : "No transfer taxes apply in this jurisdiction.",
+        };
       return s.payments.some((p) => p.type === "tax" && p.status === "settled")
         ? { value: true, detail: "Transfer taxes are paid." }
         : { value: false, detail: `${taxes.map((t) => t.label).join(", ")} not yet paid.`, responsibleRole: "escrow_officer" };
@@ -248,7 +268,9 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
     evaluate: (s) =>
       s.recording && (s.recording.status === "submitted_for_recording" || s.recording.status === "recorded")
         ? { value: true, detail: `Submitted to ${s.recording.registry}.` }
-        : { value: false, detail: "The deed hasn't been submitted for recording.", responsibleRole: "title_officer" },
+        : profile(s).vertical === "business"
+          ? { value: false, detail: "The closing filings haven't been submitted.", responsibleRole: profile(s).stepOwners.recording }
+          : { value: false, detail: "The deed hasn't been submitted for recording.", responsibleRole: profile(s).stepOwners.recording },
   },
   ownership_recorded: {
     label: "Ownership recorded",
@@ -256,9 +278,14 @@ export const FACTS: Record<FactKey, { label: string; evaluate: FactFn }> = {
       const r = s.recording;
       // Only a confirmed recording with a registry reference counts. A click is not enough.
       const ok = !!r && r.status === "recorded" && !!r.recordingReference && !!r.confirmationSource && !!r.recordedAt;
+      const j = profile(s);
+      if (j.vertical === "business")
+        return ok
+          ? { value: true, detail: `Transfer confirmed by counsel (ref ${r!.recordingReference}).` }
+          : { value: false, detail: "Counsel hasn't confirmed the ownership transfer yet.", responsibleRole: j.stepOwners.recording };
       return ok
         ? { value: true, detail: `Recorded at ${r!.registry} (ref ${r!.recordingReference}).` }
-        : { value: false, detail: "The registry hasn't confirmed the recording yet.", responsibleRole: "title_officer" };
+        : { value: false, detail: "The registry hasn't confirmed the recording yet.", responsibleRole: j.stepOwners.recording };
     },
   },
 };
@@ -277,4 +304,25 @@ export function evaluateAllFacts(s: TransactionSnapshot): Record<FactKey, FactRe
   const out = {} as Record<FactKey, FactResult>;
   for (const key of Object.keys(FACTS) as FactKey[]) out[key] = FACTS[key].evaluate(s);
   return out;
+}
+
+/** Per-profile wording for fact labels shown in rules and readiness lists. */
+const BUSINESS_FACT_LABELS: Partial<Record<FactKey, string>> = {
+  purchase_agreement_signed: "Definitive agreement signed",
+  financing_approved: "Acquisition financing approved",
+  mortgage_funded: "Acquisition loan funded",
+  inspection_completed: "Due diligence complete",
+  title_clear: "No open liens",
+  closing_statement_approved: "Funds flow memo approved",
+  signing_complete: "All closing documents signed",
+  deed_signed: "Transfer documents signed",
+  earnest_money_settled: "Deposit received",
+  taxes_paid: "Transfer taxes handled",
+  recording_submitted: "Closing filings submitted",
+  ownership_recorded: "Ownership transfer confirmed",
+};
+
+export function factLabel(s: TransactionSnapshot, key: FactKey): string {
+  const business = getJurisdiction(s.transaction.jurisdiction).vertical === "business";
+  return (business ? BUSINESS_FACT_LABELS[key] : undefined) ?? FACTS[key].label;
 }

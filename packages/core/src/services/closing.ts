@@ -12,7 +12,7 @@ import {
   RecordingConfirmationInput,
   type TitleStatus,
 } from "@sagolik/types";
-import { getJurisdiction, recordingReadiness } from "@sagolik/workflow";
+import { dealSubject, getJurisdiction, recordingReadiness } from "@sagolik/workflow";
 import { z } from "zod";
 import { type ServiceContext, isUser, requireUser } from "../context";
 import { badRequest, conflict, forbidden, notFound } from "../errors";
@@ -448,7 +448,7 @@ export async function exportCalendarIcs(ctx: ServiceContext, transactionId: stri
       `DTSTAMP:${icsDate(nowIso(ctx))}`,
       `DTSTART:${icsDate(e.startsAt)}`,
       ...(e.endsAt ? [`DTEND:${icsDate(e.endsAt)}`] : []),
-      `SUMMARY:${icsEscape(`${e.title} — ${snapshot.property.addressLine1}`)}`,
+      `SUMMARY:${icsEscape(`${e.title} — ${dealSubject(snapshot).title}`)}`,
       ...(e.location ? [`LOCATION:${icsEscape(e.location)}`] : []),
       "END:VEVENT",
     );

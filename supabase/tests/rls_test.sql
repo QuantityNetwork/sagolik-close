@@ -105,7 +105,7 @@ rollback;
 begin;
 select pg_temp.login('michael.reed@demo.sagolik.test');
 set local role authenticated;
-select pg_temp.eq((select count(*) from public.transactions), 3, 'loan officer sees only files he is on');
+select pg_temp.eq((select count(*) from public.transactions), 4, 'loan officer sees only files he is on');
 select pg_temp.eq((select count(*) from public.transactions where id = :'hillside'), 0, 'lender org admin gets no access to another org''s file');
 select pg_temp.eq((select count(*) from public.compliance_cases), 0, 'lender cannot review compliance');
 rollback;
@@ -135,6 +135,38 @@ select pg_temp.eq((select count(*) from public.ownership_records), 1, 'homeowner
 select pg_temp.eq((select count(*) from public.ownership_record_items), 6, 'Home Record items visible to owner');
 rollback;
 
+-- ----------------------------------------------------------------------------- business acquisition (beta)
+select id as blueharbor from public.transactions where reference = 'SC-DEMO-BLUEHARBOR' \gset
+begin;
+select pg_temp.login('amara.okafor@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.transactions), 1, 'business buyer sees only her deal');
+select pg_temp.eq((select count(*) from public.companies), 1, 'business buyer sees the target company');
+select pg_temp.eq((select count(*) from public.transactions where id = :'maple'), 0, 'IDOR: business buyer cannot read a real-estate file');
+select pg_temp.eq((select count(*) from public.mortgages where transaction_id = :'blueharbor'), 1, 'buyer sees acquisition financing');
+do $$ begin
+  begin
+    insert into public.companies (legal_name, entity_type, state_of_formation, industry, deal_structure, currency) values ('X LLC', 'llc', 'TX', 'x', 'asset_purchase', 'USD');
+    raise exception 'FAIL: client inserted a company';
+  exception when insufficient_privilege then raise notice 'ok: clients cannot create companies';
+  end;
+end $$;
+rollback;
+
+begin;
+select pg_temp.login('grace.liu@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.transactions where id = :'blueharbor'), 1, 'accountant sees the deal');
+select pg_temp.eq(public.has_tx_permission(:'blueharbor', 'financial.view')::int, 0, 'accountant has no money permission');
+select pg_temp.eq(public.has_tx_permission(:'blueharbor', 'document.view')::int, 1, 'accountant can work on diligence documents');
+rollback;
+
+begin;
+select pg_temp.login('olivia.carter@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.companies), 0, 'home buyer cannot see companies in other deals');
+rollback;
+
 -- ----------------------------------------------------------------------------- platform admin: no implicit data access
 begin;
 select pg_temp.login('admin@demo.sagolik.test');
@@ -160,5 +192,5 @@ rollback;
 -- ----------------------------------------------------------------------------- service role
 begin;
 set local role service_role;
-select pg_temp.eq((select count(*) from public.transactions), 4, 'service role (server only) bypasses RLS');
+select pg_temp.eq((select count(*) from public.transactions), 5, 'service role (server only) bypasses RLS');
 rollback;

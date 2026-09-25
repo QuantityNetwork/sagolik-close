@@ -196,7 +196,12 @@ insert into public.role_permissions (role, permission) values
   ('auditor', 'document.view_restricted'),
   ('auditor', 'financial.view'),
   ('auditor', 'identity.view_result'),
-  ('auditor', 'transaction.view');
+  ('auditor', 'transaction.view'),
+  ('accountant', 'document.upload'),
+  ('accountant', 'document.view'),
+  ('accountant', 'message.send'),
+  ('accountant', 'task.complete_own'),
+  ('accountant', 'transaction.view');
 
 insert into public.organization_role_permissions (role, permission) values
   ('organization_admin', 'audit.export'),

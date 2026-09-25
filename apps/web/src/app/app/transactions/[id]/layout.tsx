@@ -5,7 +5,7 @@ import Link from "next/link";
 import { TabNav } from "@/components/app/tabs";
 import { loadTx } from "@/lib/server/tx";
 
-const TYPE_LABEL = { purchase: "Purchase", sale: "Sale", refinance: "Refinance", ownership_transfer: "Ownership transfer" } as const;
+const TYPE_LABEL = { purchase: "Purchase", sale: "Sale", refinance: "Refinance", ownership_transfer: "Ownership transfer", business_acquisition: "Business acquisition" } as const;
 const TONE = { neutral: "neutral", progress: "progress", attention: "attention", done: "done", stopped: "stopped" } as const;
 
 export default async function TransactionLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {

@@ -27,6 +27,7 @@ import {
   recordingReadiness,
   sortTasks,
   type TransactionSnapshot,
+  dealSubject,
 } from "@sagolik/workflow";
 import { type ServiceContext, requireUser } from "../context";
 import { accessContext } from "../snapshot";
@@ -70,6 +71,7 @@ export const ROLE_LABELS: Record<ParticipantRole, string> = {
   insurance_agent: "Insurance agent",
   transaction_coordinator: "Transaction coordinator",
   auditor: "Auditor",
+  accountant: "Accountant",
 };
 
 export const PAYMENT_STATUS_TEXT: Record<PaymentStatus, string> = {
@@ -261,7 +263,7 @@ export async function portfolio(ctx: ServiceContext, filter: PortfolioFilter = "
     rows.push({
       id: s.transaction.id,
       reference: s.transaction.reference,
-      property: s.property.addressLine1,
+      property: dealSubject(s).title,
       city: [s.property.city, s.property.region].filter(Boolean).join(", "),
       // Principals' names only; no financial data in the bulk view.
       buyer: buyer?.displayName ?? "—",

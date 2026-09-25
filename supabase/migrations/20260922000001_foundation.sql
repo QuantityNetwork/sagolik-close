@@ -16,21 +16,23 @@ create type public.transaction_state as enum (
   'draft','invited','identity_pending','documents_pending','financing_pending','conditions_pending',
   'ready_for_signing','signing','escrow_pending','funding_pending','recording_pending',
   'ownership_transfer','closed','cancelled','disputed');
-create type public.transaction_type as enum ('purchase','sale','refinance','ownership_transfer');
+create type public.transaction_type as enum ('purchase','sale','refinance','ownership_transfer','business_acquisition');
 create type public.participant_role as enum (
   'buyer','co_buyer','seller','co_seller','agent','buyer_agent','seller_agent','broker','loan_officer',
   'mortgage_processor','title_officer','escrow_officer','attorney','notary','insurance_agent',
-  'transaction_coordinator','auditor');
+  'transaction_coordinator','auditor','accountant');
 create type public.organization_role as enum ('organization_admin','member','auditor');
 create type public.organization_type as enum (
   'real_estate_agency','title_company','law_firm','mortgage_lender','escrow_provider','bank','developer',
-  'property_company','brokerage');
+  'property_company','brokerage','ma_advisory','accounting_firm');
 create type public.participant_status as enum ('invited','active','declined','removed');
 create type public.task_status as enum ('todo','in_progress','blocked','waiting','complete','waived');
 create type public.task_priority as enum ('low','normal','high','urgent');
 create type public.document_category as enum (
   'purchase_agreement','disclosure','identity','mortgage','title','inspection','appraisal','insurance','escrow',
-  'tax','closing_statement','deed','power_of_attorney','notary','recording','other');
+  'tax','closing_statement','deed','power_of_attorney','notary','recording','other',
+  'letter_of_intent','due_diligence_report','definitive_agreement','disclosure_schedules','lien_search',
+  'transfer_instrument','funds_flow_memo','closing_certificate');
 create type public.document_status as enum ('processing','pending_review','needs_attention','approved','rejected','superseded');
 create type public.signature_status as enum ('not_required','draft','sent','viewed','signed','declined','expired','completed');
 create type public.access_level as enum ('all_participants','principals_and_professionals','professionals_only','restricted');
@@ -200,7 +202,7 @@ create table public.transactions (
   reference text not null unique,
   type public.transaction_type not null,
   state public.transaction_state not null default 'draft',
-  jurisdiction text not null check (jurisdiction ~ '^[A-Z]{2}(-[A-Z]{2})?$'),
+  jurisdiction text not null check (jurisdiction ~ '^[A-Z]{2}(-[A-Z]{2,12})?$'),
   currency public.currency_code not null,
   sale_price bigint not null check (sale_price > 0),
   expected_closing_date date,

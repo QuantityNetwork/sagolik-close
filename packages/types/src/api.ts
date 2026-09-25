@@ -61,16 +61,35 @@ export const PropertyInput = z.object({
   propertyType: z.string().trim().min(2).max(60).default("single_family"),
 });
 
+/** The company being bought (business acquisitions). Figures are as reported by the seller. */
+export const CompanyInput = z.object({
+  legalName: z.string().trim().min(2).max(200),
+  tradeName: z.string().trim().max(200).optional(),
+  entityType: z.enum(["llc", "c_corporation", "s_corporation", "partnership", "sole_proprietorship"]),
+  stateOfFormation: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/),
+  industry: z.string().trim().min(2).max(120),
+  description: z.string().trim().max(2000).optional(),
+  employeeCount: z.number().int().nonnegative().optional(),
+  annualRevenue: z.number().int().nonnegative().optional(),
+  dealStructure: z.enum(["asset_purchase", "stock_purchase", "membership_interest_purchase"]),
+});
+export type CompanyInput = z.infer<typeof CompanyInput>;
+
 export const CreateTransactionInput = z.object({
   organizationId: Uuid,
   type: TransactionType,
-  jurisdiction: z.string().regex(/^[A-Z]{2}(-[A-Z]{2})?$/),
+  jurisdiction: z.string().regex(/^[A-Z]{2}(-[A-Z]{2,12})?$/),
   currency: Currency,
   salePrice: z.number().int().positive(),
   expectedClosingDate: DateOnly.optional(),
   /** The creator's own role on this file. */
   creatorRole: ParticipantRole.default("transaction_coordinator"),
+  /** Real estate: the property. Business acquisitions: the business premises. */
   property: PropertyInput,
+  company: CompanyInput.optional(),
+}).refine((v) => (v.type === "business_acquisition") === !!v.company, {
+  message: "A business acquisition needs the company's details (and only a business acquisition has them).",
+  path: ["company"],
 });
 export type CreateTransactionInput = z.infer<typeof CreateTransactionInput>;
 

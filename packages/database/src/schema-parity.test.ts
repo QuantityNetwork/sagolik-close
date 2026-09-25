@@ -25,6 +25,7 @@ function sqlTables(): Map<string, string[]> {
       .map((l) => l.split(/\s+/)[0]!.replace(/,$/, ""));
     out.set(m[1]!, cols);
   }
+  for (const m of sql.matchAll(/alter table public\.(\w+) add column (\w+)/g)) out.get(m[1]!)?.push(m[2]!);
   return out;
 }
 
