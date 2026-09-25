@@ -58,6 +58,58 @@ export interface MoneyBalance {
   disbursed: number;
 }
 
+export interface MoneyFundsCheck {
+  id: string;
+  accountId: string;
+  transactionId: string;
+  checkedBy: string;
+  requiredAmount: number;
+  currency: string;
+  /** Returned to the account owner only. */
+  available: number | null;
+  current: number | null;
+  sufficient: boolean;
+  checkedAt: string;
+}
+
+export interface MoneyBankAccount {
+  id: string;
+  connectionId: string;
+  name: string;
+  mask: string;
+  type: string;
+  subtype: string;
+  currency: string;
+  ownershipMatched: boolean | null;
+  ownershipCheckedAt: string | null;
+  lastFundsCheck: MoneyFundsCheck | null;
+}
+
+export interface MoneyBankConnection {
+  id: string;
+  transactionId: string;
+  userId: string;
+  provider: "plaid";
+  institutionName: string;
+  status: "connected" | "reauthentication_required" | "expired" | "revoked" | "error";
+  statusAt: string;
+  consentExpiresAt: string | null;
+  createdAt: string;
+  accounts: MoneyBankAccount[];
+}
+
+/** What other parties see about a buyer's funds: the result, never the balance. */
+export interface MoneyProofOfFunds {
+  userId: string;
+  institutionName: string;
+  accountMask: string;
+  ownershipMatched: boolean;
+  requiredAmount: number;
+  currency: string;
+  sufficient: boolean;
+  checkedAt: string;
+}
+
 const KNOWN_CODES = new Set<string>([
   "bad_request", "unauthenticated", "forbidden", "not_found", "conflict", "step_up_required", "rate_limited", "idempotency_conflict", "unavailable", "internal",
 ]);
@@ -70,6 +122,12 @@ export class MoneyServiceError extends Error {
   ) {
     super(`money service: ${status} ${code}`);
     this.name = "MoneyServiceError";
+  }
+
+  /** The service's own code (e.g. "reconnect_required", "link_not_finished"), when it isn't one of ours. */
+  serviceCode = "";
+  get reconnectRequired() {
+    return this.serviceCode === "reconnect_required";
   }
 }
 
@@ -100,7 +158,37 @@ export class MoneyServiceClient {
   }
 
   funds(caller: MoneyCaller) {
-    return this.call<{ transactionId: string; balances: MoneyBalance[] }>("GET", `/v1/transactions/${caller.transactionId}/funds`, caller);
+    return this.call<{ transactionId: string; balances: MoneyBalance[]; proofOfFunds?: MoneyProofOfFunds[] }>("GET", `/v1/transactions/${caller.transactionId}/funds`, caller);
+  }
+
+  /** Starts Plaid Hosted Link; Plaid returns the person to the configured callback with ?link={linkId}. */
+  startBankLink(caller: MoneyCaller, body: { legalName?: string }) {
+    return this.call<{ linkId: string; hostedLinkUrl: string; expiresAt: string }>("POST", `/v1/transactions/${caller.transactionId}/bank-links`, caller, body);
+  }
+
+  completeBankLink(caller: MoneyCaller, linkId: string, body: { legalName: string }) {
+    return this.call<{ connection: MoneyBankConnection }>("POST", `/v1/bank-links/${encodeURIComponent(linkId)}/complete`, caller, body);
+  }
+
+  listBankConnections(caller: MoneyCaller) {
+    return this.call<{ connections: MoneyBankConnection[] }>("GET", `/v1/transactions/${caller.transactionId}/bank-connections`, caller);
+  }
+
+  refreshBankConnection(caller: MoneyCaller, connectionId: string, body: { legalName: string }) {
+    return this.call<{ connection: MoneyBankConnection }>("POST", `/v1/bank-connections/${encodeURIComponent(connectionId)}/refresh`, caller, body);
+  }
+
+  proofOfFunds(caller: MoneyCaller, connectionId: string, accountId: string, body: { requiredAmount: number; currency: string }) {
+    return this.call<{ fundsCheck: MoneyFundsCheck }>(
+      "POST",
+      `/v1/bank-connections/${encodeURIComponent(connectionId)}/accounts/${encodeURIComponent(accountId)}/proof-of-funds`,
+      caller,
+      body,
+    );
+  }
+
+  disconnectBank(caller: MoneyCaller, connectionId: string) {
+    return this.call<{ connection: MoneyBankConnection }>("POST", `/v1/bank-connections/${encodeURIComponent(connectionId)}/disconnect`, caller, {});
   }
 
   listInstructions(caller: MoneyCaller) {
@@ -159,8 +247,11 @@ export class MoneyServiceClient {
             const status = res.statusCode ?? 0;
             if (status >= 200 && status < 300 && json) return resolve(json as T);
             const err = (json as { error?: { code?: string; message?: string } } | null)?.error;
-            const code = (err?.code && KNOWN_CODES.has(err.code) ? err.code : "provider_error") as ErrorCode;
-            reject(new MoneyServiceError(status, code, err?.message ?? "The payments service didn't respond as expected. Nothing was changed."));
+            // Service-specific codes (link_not_finished, reconnect_required…) map by status; serviceCode keeps the original.
+            const code = (err?.code && KNOWN_CODES.has(err.code) ? err.code : status === 409 ? "conflict" : status === 429 ? "rate_limited" : "provider_error") as ErrorCode;
+            const e = new MoneyServiceError(status, code, err?.message ?? "The payments service didn't respond as expected. Nothing was changed.");
+            e.serviceCode = err?.code ?? "";
+            reject(e);
           });
         },
       );

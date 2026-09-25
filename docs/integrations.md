@@ -8,7 +8,7 @@ Every external capability sits behind an interface in `packages/integrations`. `
 
 | Capability | Interface | Implemented adapters | Configure |
 | --- | --- | --- | --- |
-| Open banking | `BankingProvider` | **Plaid** (`plaid.ts`), sandbox bank (`mock.ts`, with an expiring-consent institution) | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`, `PLAID_WEBHOOK_SECRET` |
+| Open banking | `BankingProvider` | **Plaid** (`plaid.ts`), sandbox bank (`mock.ts`, with an expiring-consent institution) | `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` (or `MONEY_PLAID_*` on the money service) |
 | Identity / KYC | `IdentityProvider` | Sandbox (hosted page at `/sandbox/identity`) | — production adapter to be written (e.g. Persona, Onfido) |
 | E-signature | `SignatureProvider` | Sandbox (ceremony at `/sandbox/sign`) | — production adapter to be written (e.g. DocuSign, Dropbox Sign) |
 | Payments | `PaymentProvider` | Sandbox (advance a payment's status from the Money page in demo mode) | — production adapter to be written (e.g. Stripe Treasury, Modern Treasury) |
@@ -31,10 +31,13 @@ The sandbox adapters sign their webhooks with `MOCK_WEBHOOK_SECRET` and deliver 
 
 ## Bank connections
 
-Consent is always provider-hosted (Plaid Link, or the sandbox consent page). The flow:
+Consent is always provider-hosted (Plaid Hosted Link, where the person also picks their bank, or the sandbox consent page). Plaid is asked for Identity and Balance only, never Auth, so full account and routing numbers never reach Sagolik. The flow:
 
 - `connectBank` returns a redirect URL and a `state` value, which is bound to the user.
 - The callback exchanges the code.
 - The access token is stored encrypted in `bank_connection_secrets`, which only the service role can read.
 - Accounts are stored masked. Ownership is verified by name matching against the profile.
 - Expired or revoked consent moves the connection to `reauthentication_required` and notifies the owner.
+- Plaid webhooks go to `/api/webhooks/plaid` and must carry a valid `Plaid-Verification` JWT (ES256, Plaid's key, at most 5 minutes old, SHA-256 of the exact body).
+- Proof of funds: the buyer can check one of their own accounts against what the closing still needs.
+- With `MONEY_SERVICE_URL` set, all of this runs in the Go money service instead: the access token never reaches the web app, which keeps a masked copy, and escrow sees proof-of-funds results. See [money-service.md](money-service.md) §9b.

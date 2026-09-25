@@ -203,7 +203,11 @@ export async function startBankConnectionAction(_p: ActionState, fd: FormData): 
   const result = await runAction(async () => {
     const { ctx } = await requireContext();
     const txId = formString(fd, "transactionId");
-    const started = await core.startBankConnection(ctx, { transactionId: txId, institutionId: formString(fd, "institutionId") ?? "", country: formString(fd, "country") ?? "US" }, `${await appUrl()}/api/v1/bank-connections/callback`);
+    const started = await core.startBankConnection(
+      ctx,
+      { transactionId: txId, institutionId: formString(fd, "institutionId") || undefined, country: formString(fd, "country") ?? "US" },
+      `${await appUrl()}/api/v1/bank-connections/callback`,
+    );
     url = started.redirectUrl;
   });
   if (result.ok && url) redirect(url);
@@ -215,6 +219,22 @@ export async function refreshBankAction(_p: ActionState, fd: FormData): Promise<
     const { ctx } = await requireContext();
     const r = await core.refreshBankConnection(ctx, id(fd, "connectionId"));
     return { message: r.status === "connected" ? "Balances refreshed." : r.message ?? undefined, revalidate: ["/app"] };
+  });
+}
+
+export async function checkFundsAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const { ctx } = await requireContext();
+    const r = await core.checkFundsForClosing(ctx, id(fd, "connectionId"), id(fd, "accountId"));
+    const amount = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: r.currency }).format(n / 100);
+    return {
+      message: r.sufficient
+        ? `This account covers the ${amount(r.required)} still needed for closing.`
+        : r.available === null
+          ? "Your bank didn't report an available balance for this account."
+          : `This account is ${amount(r.required - r.available)} short of the ${amount(r.required)} still needed for closing.`,
+      revalidate: ["/app"],
+    };
   });
 }
 

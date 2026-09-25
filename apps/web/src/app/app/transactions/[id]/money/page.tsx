@@ -1,4 +1,4 @@
-import { BANK_STATUS_TEXT, listInstitutions, moneyView, myBankConnections } from "@sagolik/core";
+import { BANK_STATUS_TEXT, bankConnectMode, listInstitutions, moneyView, myBankConnections, proofOfFundsFor } from "@sagolik/core";
 import { formatDate, formatDateTime } from "@sagolik/i18n";
 import { SOURCE_OF_FUNDS_TYPES } from "@sagolik/types";
 import { Alert, Card, CardBody, CardHeader, DefinitionList, EmptyState, Field, formatMoney, Input, Select, StatusBadge, Textarea } from "@sagolik/ui";
@@ -11,6 +11,7 @@ import {
   addEscrowConditionAction,
   approvePaymentAction,
   cancelPaymentAction,
+  checkFundsAction,
   createInstructionAction,
   declareFundsAction,
   initiatePaymentAction,
@@ -51,6 +52,8 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
   const isBuyer = s.participants.some((p) => p.userId === actor.userId && (p.role === "buyer" || p.role === "co_buyer"));
   const people = Object.fromEntries(s.participants.filter((p) => p.userId).map((p) => [p.userId!, p.displayName]));
   const outstanding = s.escrow ? Math.max(0, s.escrow.requiredAmount - s.escrow.receivedAmount) : money.remainingAtClosing;
+  const connectMode = bankConnectMode(ctx);
+  const proofs = can("escrow.manage") || can("beneficiary.verify") ? await proofOfFundsFor(ctx, s) : [];
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -433,6 +436,27 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
           </CardBody>
         </Card>
 
+        {proofs.length > 0 ? (
+          <Card>
+            <CardHeader title="Buyer's proof of funds" description="A real-time check of the buyer's own account against the amount still needed. You see the result, not the balance." />
+            <CardBody>
+              <ul className="space-y-2 text-[13px]">
+                {proofs.map((p) => (
+                  <li key={`${p.userId}-${p.accountMask}-${p.checkedAt}`} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-ink-2">
+                      {people[p.userId] ?? "Buyer"} · {p.institutionName} •••• {p.accountMask} {p.ownershipMatched ? "· in their name" : "· owner not confirmed"}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <StatusBadge tone={p.sufficient ? "done" : "attention"}>{p.sufficient ? `Covers ${formatMoney(p.requiredAmount, p.currency)}` : `Doesn't cover ${formatMoney(p.requiredAmount, p.currency)}`}</StatusBadge>
+                      <span className="text-[12px] text-ink-3">{formatDateTime(p.checkedAt, locale)}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CardBody>
+          </Card>
+        ) : null}
+
         {can("payment.initiate") ? (
           <Card id="connect" className="scroll-mt-24">
             <CardHeader title="Your bank accounts" description="Connected through your bank's own consent screen. We never see your banking password." />
@@ -444,13 +468,28 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
                     <StatusBadge tone={c.status === "connected" ? "done" : c.status === "revoked" ? "stopped" : "attention"}>{c.status === "connected" ? "Connected" : c.status.replace(/_/g, " ")}</StatusBadge>
                   </div>
                   {c.status !== "connected" ? <p className="mt-1 text-[13px] text-ink-3">{BANK_STATUS_TEXT[c.status]}</p> : null}
-                  <ul className="mt-2 space-y-1 text-[13px]">
+                  <ul className="mt-2 space-y-2 text-[13px]">
                     {accts.map((a) => (
-                      <li key={a.id} className="flex justify-between gap-2">
-                        <span className="text-ink-2">
-                          {a.name} •••• {a.mask} {a.ownershipVerified ? <span className="text-success">· in your name</span> : <span className="text-attention">· owner not confirmed</span>}
-                        </span>
-                        {a.availableBalance !== null ? <span className="num text-ink">{formatMoney(a.availableBalance, a.currency)}</span> : null}
+                      <li key={a.id}>
+                        <div className="flex justify-between gap-2">
+                          <span className="text-ink-2">
+                            {a.name} •••• {a.mask} {a.ownershipVerified ? <span className="text-success">· in your name</span> : <span className="text-attention">· owner not confirmed</span>}
+                          </span>
+                          {a.availableBalance !== null ? <span className="num text-ink">{formatMoney(a.availableBalance, a.currency)}</span> : null}
+                        </div>
+                        {a.availableBalance !== null && a.balanceAsOf && outstanding > 0 ? (
+                          <p className={a.availableBalance >= outstanding ? "text-[12px] text-success" : "text-[12px] text-attention"}>
+                            {a.availableBalance >= outstanding
+                              ? `Covers the ${formatMoney(outstanding, cur)} still needed`
+                              : `${formatMoney(outstanding - a.availableBalance, cur)} short of the ${formatMoney(outstanding, cur)} still needed`}{" "}
+                            · checked {formatDateTime(a.balanceAsOf, locale)}
+                          </p>
+                        ) : null}
+                        {c.status === "connected" && isBuyer && a.ownershipVerified && outstanding > 0 && a.currency === cur ? (
+                          <ActionButton action={checkFundsAction} fields={{ connectionId: c.id, accountId: a.id }} variant="ghost">
+                            Check funds for closing
+                          </ActionButton>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -466,20 +505,26 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
               <ActionForm action={startBankConnectionAction} className="space-y-3">
                 <input type="hidden" name="transactionId" value={id} />
                 <input type="hidden" name="country" value={s.property.country} />
-                <Field label="Connect a bank" htmlFor="institutionId">
-                  <Select id="institutionId" name="institutionId" required defaultValue="">
-                    <option value="" disabled>
-                      Choose your bank…
-                    </option>
-                    {institutions.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.name}
+                {connectMode.chooseAtProvider ? (
+                  <p className="text-[13px] text-ink-3">
+                    {connectMode.providerName} opens in its own window: you pick your bank there and sign in on your bank's own screen. We receive your account names, the last four digits, the account holder's name and balances, never your password.
+                  </p>
+                ) : (
+                  <Field label="Connect a bank" htmlFor="institutionId">
+                    <Select id="institutionId" name="institutionId" required defaultValue="">
+                      <option value="" disabled>
+                        Choose your bank…
                       </option>
-                    ))}
-                  </Select>
-                </Field>
+                      {institutions.map((i) => (
+                        <option key={i.id} value={i.id}>
+                          {i.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
                 <SubmitButton variant="secondary" pendingLabel="Opening your bank…">
-                  Continue to your bank
+                  {connectMode.chooseAtProvider ? `Continue to ${connectMode.providerName}` : "Continue to your bank"}
                 </SubmitButton>
               </ActionForm>
             </CardBody>

@@ -37,8 +37,8 @@ export interface NormalizedWebhook {
 }
 
 export interface WebhookCapable {
-  /** Verify + parse a raw webhook. Throws `WebhookRejectedError` when invalid. */
-  parseWebhook(rawBody: string, headers: Headers): NormalizedWebhook;
+  /** Verify + parse a raw webhook. Throws (or rejects with) `WebhookRejectedError` when invalid. */
+  parseWebhook(rawBody: string, headers: Headers): NormalizedWebhook | Promise<NormalizedWebhook>;
 }
 
 export class WebhookRejectedError extends Error {

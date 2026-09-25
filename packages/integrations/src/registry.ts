@@ -86,7 +86,8 @@ export function createProviders(env: Env): Providers {
 
   if (env.APP_ENV === "production") {
     const sandboxed = Object.entries(mocks)
-      .filter(([, v]) => v)
+      // With the money service, bank connections go through it (and its own Plaid settings), not this adapter.
+      .filter(([k, v]) => v && !(k === "banking" && env.MONEY_SERVICE_URL))
       .map(([k]) => k);
     if (sandboxed.length > 0) {
       // Regulated functions must never silently run on sandbox adapters in production.

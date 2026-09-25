@@ -73,6 +73,7 @@ export class MockBankingProvider extends MockProviderBase implements BankingProv
   readonly info: ProviderInfo = { id: "mock_banking", displayName: "Sandbox Open Banking", mode: "mock" };
   readonly supportedCountries = ["US", "SE", "PL", "DE", "CH", "LI"] as const;
   readonly supportsPaymentInitiation = true;
+  readonly providerChoosesInstitution = false;
   private state = globalSingleton<MockBankState>("mock_bank_state", () => ({ pending: new Map(), connections: new Map() }));
 
   constructor(

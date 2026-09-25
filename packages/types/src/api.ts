@@ -149,7 +149,8 @@ export type SignatureRequestInput = z.infer<typeof SignatureRequestInput>;
 
 export const CreateBankConnectionInput = z.object({
   transactionId: Uuid.optional(),
-  institutionId: z.string().min(1).max(100),
+  /** Optional when the provider's own screen lets the person pick their bank (Plaid). */
+  institutionId: z.string().min(1).max(100).optional(),
   country: z.string().length(2),
 });
 export type CreateBankConnectionInput = z.infer<typeof CreateBankConnectionInput>;

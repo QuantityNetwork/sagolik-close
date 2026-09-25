@@ -1,4 +1,4 @@
-import { BANK_STATUS_TEXT, listInstitutions, myBankConnections } from "@sagolik/core";
+import { BANK_STATUS_TEXT, bankConnectMode, listInstitutions, myBankConnections } from "@sagolik/core";
 import { formatDateTime } from "@sagolik/i18n";
 import { Alert, Card, CardBody, CardHeader, EmptyState, Field, formatMoney, Select, StatusBadge } from "@sagolik/ui";
 import { Landmark } from "lucide-react";
@@ -14,6 +14,7 @@ export default async function BanksSettings({ searchParams }: { searchParams: Pr
   const { ctx } = await requireContext("/app/settings/banks");
   const connections = await myBankConnections(ctx);
   const institutions = await listInstitutions(ctx, "US");
+  const connectMode = bankConnectMode(ctx);
 
   return (
     <div className="space-y-6">
@@ -63,27 +64,35 @@ export default async function BanksSettings({ searchParams }: { searchParams: Pr
           </ul>
         )}
       </Card>
+      {ctx.money ? (
+        <Alert tone="info">To connect a bank, open the closing it's for and go to Money.</Alert>
+      ) : (
       <Card>
         <CardHeader title="Connect a bank" />
         <CardBody>
           <ActionForm action={startBankConnectionAction} className="flex flex-wrap items-end gap-2">
             <input type="hidden" name="country" value="US" />
-            <Field label="Bank" htmlFor="institutionId" className="min-w-64 flex-1">
-              <Select id="institutionId" name="institutionId" required defaultValue="">
-                <option value="" disabled>
-                  Choose your bank…
-                </option>
-                {institutions.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    {i.name}
+            {connectMode.chooseAtProvider ? (
+              <p className="min-w-64 flex-1 text-[13px] text-ink-3">You pick your bank on {connectMode.providerName}'s screen and sign in with your bank directly.</p>
+            ) : (
+              <Field label="Bank" htmlFor="institutionId" className="min-w-64 flex-1">
+                <Select id="institutionId" name="institutionId" required defaultValue="">
+                  <option value="" disabled>
+                    Choose your bank…
                   </option>
-                ))}
-              </Select>
-            </Field>
-            <SubmitButton variant="secondary">Continue to your bank</SubmitButton>
+                  {institutions.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            <SubmitButton variant="secondary">{connectMode.chooseAtProvider ? `Continue to ${connectMode.providerName}` : "Continue to your bank"}</SubmitButton>
           </ActionForm>
         </CardBody>
       </Card>
+      )}
     </div>
   );
 }

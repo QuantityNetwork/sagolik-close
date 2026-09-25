@@ -1,6 +1,6 @@
 # Money service (Go) — design
 
-Status: **M1 and M2 implemented** in `services/money` (see its README). M3 onwards not started. Decisions this design rests on: **US first**, and Sagolik Close stays **an orchestration layer only**. It never holds, receives or moves client funds.
+Status: **M1, M2 and M3 implemented** in `services/money` (see its README). M3 is tested against a stand-in Plaid API and awaits a run with real sandbox keys. M4 onwards not started. Decisions this design rests on: **US first**, and Sagolik Close stays **an orchestration layer only**. It never holds, receives or moves client funds.
 
 ## 1. What "orchestration only" means for money in the US
 
@@ -94,8 +94,12 @@ Postgres roles:
 ## 6. Internal API (v1)
 
 ```
-POST /v1/bank-connections:start        → Plaid Link token
-POST /v1/bank-connections:complete     → exchange public token; ownership match
+POST /v1/transactions/{id}/bank-links              → Plaid Hosted Link URL (payer)
+POST /v1/bank-links/{id}/complete                  → exchange public token; ownership match
+GET  /v1/transactions/{id}/bank-connections        → the caller's own connections (masked)
+POST /v1/bank-connections/{id}/refresh             → re-check ownership
+POST /v1/bank-connections/{id}/accounts/{aid}/proof-of-funds → balance vs. amount needed
+POST /v1/bank-connections/{id}/disconnect          → revoke at Plaid, destroy token (step-up)
 GET  /v1/transactions/{id}/funds       → masked accounts, proof of funds, ledger summary
 POST /v1/transactions/{id}/instructions            → new version (step-up required)
 POST /v1/instructions/{id}:verify                   → second person, out-of-band reference (step-up)
@@ -144,7 +148,7 @@ The rules already exist in `packages/core/src/services/{banking,payments,escrow}
    - port instruction versioning, cooling-off, dual control and the ledger
    - a TypeScript adapter (`MoneyServiceClient`) replaces the in-process calls when `MONEY_SERVICE_URL` is set
    - the lifecycle tests run against both implementations
-3. **M3 — Plaid:** Plaid Auth, Identity and Balance for account ownership and proof of funds. Tokens now live only in the money service.
+3. **M3 — Plaid** ✅ done: Identity and Balance for account ownership and proof of funds, through Hosted Link. Tokens live only in the money service. (Auth, which returns full account and routing numbers, turned out to be unnecessary for F1 and isn't requested.)
 4. **M4 — First escrow partner: Fidelity National Financial (FNF).** FNF is the largest US title insurer (brands include Fidelity National Title and Chicago Title) and owns SoftPro, a title production system also widely used by independent agents. Integrate with SoftPro through its partner program, to verify beneficiaries and confirm receipt and disbursement (F1, F3). This needs a signed partnership: the APIs are partner-gated. FNF also runs its own consumer closing app (inHere), so position Sagolik Close as the multi-party layer that works *with* their systems, not a replacement for them.
 5. **M5 — Hardening:** penetration test, SOC 2 Type I readiness, runbooks, and delete the TypeScript money code.
 6. **Later, only with counsel sign-off:** F2 escrow-initiated ACH/RTP.
@@ -161,6 +165,16 @@ The rules already exist in `packages/core/src/services/{banking,payments,escrow}
 - *Dual approval of payment intents.* It moves with F2 (escrow-initiated payments), after counsel sign-off.
 - *Mirror resync.* The money service is written first and the web app mirror second. If the mirror write fails, the service stays correct and the mirror can be rebuilt from `GET /v1/transactions/{id}/instructions`. That repair job is part of M5.
 
+## 9b. What M3 delivered
+
+- **Hosted Link.** The buyer starts from the closing's Money page and goes to Plaid, where they pick their bank and consent. Plaid sends them back to the web app's callback with `?link=…`; the web app asks the money service to finish. Only the person who started a link, in the same closing, can finish it, and finishing twice returns the same connection.
+- **Ownership.** The account holder names from Plaid Identity are compared with the buyer's name (the same loose rule as the web app). Names are not stored; only the result is.
+- **Proof of funds.** A real-time Balance call compares the account's available balance with what the closing still needs. The amount comes from the transaction (escrow's outstanding amount, or the estimate before escrow opens), never from the request. The buyer sees their balance; escrow and title see only "covers / doesn't cover $X" on the Money page. At most five checks per account per hour.
+- **Tokens.** Sealed with envelope encryption; the only value in the bank tables that can change, and only to be destroyed. Disconnecting (step-up) revokes the Item at Plaid first.
+- **Webhooks.** `POST /webhooks/plaid` on a separate listener. Checked against Plaid's signed JWT (ES256, key fetched by `kid`, issued within 5 minutes, SHA-256 of the exact body), stored once, and applied before being marked processed so Plaid's retries finish the job. `ITEM` errors, pending expiry and revoked consent update the connection status; revoked consent destroys the token.
+- **Without the money service.** The web app's own Plaid adapter uses the same Hosted Link flow and the same webhook rules (`@sagolik/security` `PlaidWebhookVerifier`), with the token encrypted in the web app's database. Proof-of-funds results are then visible to the buyer only.
+- **Tests.** Unit tests for the client, webhook verifier and name matching; store tests as the runtime role; the service end-to-end test; and the cross-service test (TypeScript → Go → stand-in Plaid). `TestLiveSandbox` runs against Plaid's real sandbox when `PLAID_CLIENT_ID` and `PLAID_SECRET` are set.
+
 ## 10. Decisions
 
 | Decision | Outcome |
@@ -170,3 +184,4 @@ The rules already exist in `packages/core/src/services/{banking,payments,escrow}
 | Cloud for the money service | AWS (KMS/HSM, Secrets Manager, private networking) |
 | First escrow/title partner | Fidelity National Financial, through SoftPro |
 | Wire-fraud verification provider | Open: choose alongside the FNF conversation |
+| Bank data provider | Plaid (Hosted Link; Identity + Balance only) |

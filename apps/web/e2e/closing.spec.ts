@@ -87,3 +87,19 @@ test("business buyer sees the acquisition with deal milestones", async ({ page }
   await page.getByRole("link", { name: "View all" }).first().click();
   await expect(page.getByText("Business acquisition (beta)").first()).toBeVisible();
 });
+
+test("buyer connects a bank through the consent screen and checks funds for closing", async ({ page }) => {
+  await signInAs(page, "olivia.carter");
+  await page.goto("/app/transactions");
+  await page.getByRole("link", { name: /Maple Ridge/ }).first().click();
+  await page.getByRole("navigation", { name: /transaction/i }).getByRole("link", { name: "Money" }).click();
+  await page.locator("#institutionId").selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Continue to your bank" }).click();
+  await expect(page).toHaveURL(/\/sandbox\/bank/);
+  await page.getByRole("button", { name: "Allow access" }).click();
+  await expect(page.getByText("Your bank is connected").first()).toBeVisible();
+  await page.getByRole("button", { name: "Check funds for closing" }).first().click();
+  // The result is worded for the buyer: covered, or short by an amount, with when it was checked.
+  await expect(page.getByText(/(Covers the|short of the) \$[\d,.]+ still needed · checked/).first()).toBeVisible();
+  await expect(page.getByRole("alert").filter({ hasText: /went wrong|couldn't/ })).toHaveCount(0);
+});

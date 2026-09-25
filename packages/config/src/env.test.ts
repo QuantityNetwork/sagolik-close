@@ -16,4 +16,10 @@ describe("environment", () => {
   it("refuses demo mode in production", () => {
     expect(() => parseEnv({ APP_ENV: "production", DEMO_MODE: "true", SESSION_SECRET: "x".repeat(32) })).toThrow(/Demo mode cannot run in production/);
   });
+
+  it("keeps Plaid sandbox keys out of production", () => {
+    const prod = { APP_ENV: "production", SESSION_SECRET: "x".repeat(32), PLAID_CLIENT_ID: "id", PLAID_SECRET: "s" };
+    expect(() => parseEnv(prod)).toThrow(/PLAID_ENV must be production/);
+    expect(() => parseEnv({ ...prod, PLAID_ENV: "development" })).toThrow();
+  });
 });

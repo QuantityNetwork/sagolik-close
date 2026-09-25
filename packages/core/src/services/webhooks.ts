@@ -3,7 +3,7 @@
  * validation → exactly-once recording (unique provider+event id) → mapping
  * to domain handlers → processed/failed status with retry + dead-letter.
  */
-import { type NormalizedWebhook, WebhookRejectedError } from "@sagolik/integrations";
+import { type NormalizedWebhook, ProviderError, WebhookRejectedError } from "@sagolik/integrations";
 import { sha256Hex } from "@sagolik/security";
 import type { WebhookEvent } from "@sagolik/types";
 import { type ServiceContext, asSystem } from "../context";
@@ -56,6 +56,20 @@ async function route(ctx: ServiceContext, providerId: string, event: NormalizedW
     });
     return "processed";
   }
+  if (providerId === p.banking.info.id && (event.eventType === "bank.revoked" || event.eventType === "bank.repaired" || event.eventType === "bank.error")) {
+    const conn = await ctx.writer.bank_connections.findOne({ externalConnectionId: String(event.data.externalConnectionId ?? "") });
+    if (!conn || conn.status === "revoked") return "ignored";
+    if (event.eventType === "bank.revoked") {
+      // The person withdrew consent at the provider; the stored token is useless from now on.
+      await ctx.writer.bank_connections.update(conn.id, { status: "revoked", lastError: null });
+      await audit(ctx, { action: "bank.disconnected", resourceType: "bank_connection", resourceId: conn.id, transactionId: conn.transactionId, metadata: { source: "provider" } });
+    } else if (event.eventType === "bank.repaired") {
+      await ctx.writer.bank_connections.update(conn.id, { status: "connected", lastError: null });
+    } else {
+      await ctx.writer.bank_connections.update(conn.id, { status: "error", lastError: "Your bank reported a problem with this connection. Try refreshing, or reconnect." });
+    }
+    return "processed";
+  }
   return "ignored";
 }
 
@@ -66,8 +80,13 @@ export async function handleWebhook(base: ServiceContext, providerId: string, ra
 
   let event: NormalizedWebhook;
   try {
-    event = receiver.parseWebhook(rawBody, headers);
+    event = await receiver.parseWebhook(rawBody, headers);
   } catch (e) {
+    if (e instanceof ProviderError && e.opts.retryable) {
+      // We couldn't check the signature (e.g. the provider's key endpoint is down): ask for a retry.
+      ctx.log.warn("webhook verification unavailable", { provider: providerId, code: e.code, correlationId: ctx.correlationId });
+      return { status: "failed", httpStatus: 500 };
+    }
     const reason = e instanceof WebhookRejectedError ? e.reason : "invalid";
     await audit(ctx, { action: "webhook.rejected", resourceType: "webhook", resourceId: providerId, metadata: { reason, bytes: rawBody.length } });
     ctx.log.warn("webhook rejected", { provider: providerId, reason, correlationId: ctx.correlationId });

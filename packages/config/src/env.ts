@@ -30,8 +30,7 @@ const EnvSchema = z.object({
 
   PLAID_CLIENT_ID: optional,
   PLAID_SECRET: optional,
-  PLAID_ENV: z.enum(["sandbox", "development", "production"]).default("sandbox"),
-  PLAID_WEBHOOK_SECRET: optional,
+  PLAID_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
 
   TRUELAYER_CLIENT_ID: optional,
   TRUELAYER_CLIENT_SECRET: optional,
@@ -91,6 +90,9 @@ export function parseEnv(source: Record<string, string | undefined> = process.en
   const supabaseConfigured = !!(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
   const demoMode = env.DEMO_MODE || !supabaseConfigured;
 
+  if (env.APP_ENV === "production" && env.PLAID_CLIENT_ID && env.PLAID_ENV !== "production") {
+    throw new EnvError("PLAID_ENV must be production when APP_ENV is production (sandbox keys only reach Plaid's test banks).");
+  }
   if (env.MONEY_SERVICE_URL) {
     const missing = (["MONEY_SERVICE_CA_FILE", "MONEY_SERVICE_CERT_FILE", "MONEY_SERVICE_KEY_FILE", "MONEY_ASSERTION_SIGNING_JWK_FILE"] as const).filter((k) => !env[k]);
     if (missing.length) throw new EnvError(`MONEY_SERVICE_URL is set, so ${missing.join(", ")} must be set too (mutual TLS and signed assertions).`);

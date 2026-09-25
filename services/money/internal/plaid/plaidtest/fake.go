@@ -31,6 +31,7 @@ type Fake struct {
 
 	mu        sync.Mutex
 	links     map[string]*link  // link_token → session
+	order     []string          // link tokens, oldest first
 	public    map[string]string // public_token → item id
 	items     map[string]*Item  // item id → item
 	tokens    map[string]string // access_token → item id
@@ -76,7 +77,18 @@ func writeErr(w http.ResponseWriter, status int, typ, code string) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"error_type": typ, "error_code": code, "error_message": code, "request_id": "req"})
 }
 
+// ControlPath lets a test in another process finish the latest link (the fake only).
+const ControlPath = "/__plaidtest/finish-latest-link"
+
 func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == ControlPath {
+		if tok := f.LastLinkToken(); tok != "" && f.FinishLink(tok) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		writeErr(w, 404, "INVALID_REQUEST", "NO_OPEN_LINK")
+		return
+	}
 	var body map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeErr(w, 400, "INVALID_REQUEST", "INVALID_BODY")
@@ -114,6 +126,7 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		tok := id("link-sandbox-")
 		f.links[tok] = &link{userID: fmt.Sprint(user["client_user_id"])}
+		f.order = append(f.order, tok)
 		out["link_token"], out["hosted_link_url"] = tok, "https://hosted.plaid.com/link/"+tok
 		out["expiration"] = time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339)
 	case "/link/token/get":
@@ -202,13 +215,13 @@ func (f *Fake) FinishLink(linkToken string) bool {
 	return true
 }
 
-// LastLinkToken returns any started link token (tests start one at a time).
+// LastLinkToken returns the most recently started link that hasn't finished.
 func (f *Fake) LastLinkToken() string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	for t, l := range f.links {
-		if !l.finished {
-			return t
+	for i := len(f.order) - 1; i >= 0; i-- {
+		if !f.links[f.order[i]].finished {
+			return f.order[i]
 		}
 	}
 	return ""

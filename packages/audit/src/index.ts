@@ -39,6 +39,7 @@ export const AUDIT_ACTIONS = [
   "source_of_funds.declared",
   "bank.connected",
   "bank.refreshed",
+  "bank.funds_checked",
   "bank.disconnected",
   "bank_instruction.created",
   "bank_instruction.verified",

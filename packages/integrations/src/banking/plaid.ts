@@ -1,18 +1,24 @@
 /**
  * Plaid adapter (US/CA/EU aggregation).
  *
- * Uses Plaid Hosted Link so the person completes consent on Plaid's own
- * pages; Sagolik never sees credentials. Endpoints used:
+ * Uses Plaid Hosted Link so the person completes consent, and picks their
+ * bank, on Plaid's own pages; Sagolik never sees credentials. Only Identity
+ * (ownership) and Balance (proof of funds) are used: Auth isn't requested, so
+ * full account and routing numbers never reach us. Endpoints used:
  *   /link/token/create, /link/token/get, /item/public_token/exchange,
  *   /accounts/get, /accounts/balance/get, /transactions/get, /identity/get,
- *   /institutions/get_by_id, /institutions/get, /item/get, /item/remove
+ *   /institutions/get_by_id, /institutions/get, /item/get, /item/remove,
+ *   /webhook_verification_key/get
  *
- * Status: implemented against Plaid's documented API, exercised in Plaid
- * sandbox. Webhook verification (JWT/ES256 via /webhook_verification_key/get)
- * is NOT yet implemented — Plaid webhooks are rejected until it is, and
- * connection health is polled via `refreshConnection` instead.
+ * This adapter serves deployments without the Go money service. When
+ * MONEY_SERVICE_URL is set, bank connections go through the money service
+ * instead and access tokens never reach the web app.
+ *
+ * Status: written against Plaid's documented API and tested against a
+ * stand-in; run it against your Plaid sandbox keys before relying on it.
  */
 import type { Currency } from "@sagolik/types";
+import { type PlaidJwk, PlaidWebhookVerifier, sha256Hex } from "@sagolik/security";
 import { CURRENCIES } from "@sagolik/types";
 import { type NormalizedWebhook, type ProviderInfo, ProviderError, WebhookRejectedError } from "../common";
 import {
@@ -29,7 +35,6 @@ import {
 
 const HOSTS = {
   sandbox: "https://sandbox.plaid.com",
-  development: "https://development.plaid.com",
   production: "https://production.plaid.com",
 } as const;
 
@@ -62,13 +67,24 @@ export class PlaidBankingProvider implements BankingProvider {
   readonly info: ProviderInfo;
   readonly supportedCountries = ["US", "CA", "GB", "IE", "FR", "ES", "NL", "DE"] as const;
   readonly supportsPaymentInitiation = false;
+  readonly providerChoosesInstitution = true;
   private readonly host: string;
+  private readonly webhooks: PlaidWebhookVerifier;
 
   constructor(
-    private readonly cfg: { clientId: string; secret: string; env: keyof typeof HOSTS; webhookUrl?: string },
+    private readonly cfg: { clientId: string; secret: string; env: keyof typeof HOSTS; webhookUrl?: string; baseUrl?: string },
     private readonly fetchImpl: typeof fetch = fetch,
   ) {
-    this.host = HOSTS[cfg.env];
+    this.host = cfg.baseUrl ?? HOSTS[cfg.env];
+    this.webhooks = new PlaidWebhookVerifier(async (kid) => {
+      try {
+        const r = await this.call<{ key: PlaidJwk }>("/webhook_verification_key/get", { key_id: kid });
+        return r.key;
+      } catch (e) {
+        if (e instanceof ProviderError && e.opts.retryable) throw e; // Plaid unreachable: let the pipeline answer 5xx
+        return null;
+      }
+    });
     this.info = { id: "plaid", displayName: "Plaid", mode: cfg.env === "production" ? "production" : "sandbox" };
   }
 
@@ -116,17 +132,15 @@ export class PlaidBankingProvider implements BankingProvider {
     }
   }
 
-  async connectBank(opts: { userId: string; fullName: string; institutionId: string; country: string; redirectUri: string; state: string }): Promise<ConnectStart> {
+  async connectBank(opts: { userId: string; fullName: string; institutionId?: string; country: string; redirectUri: string; state: string }): Promise<ConnectStart> {
     const r = await this.call<{ link_token: string; hosted_link_url?: string }>("/link/token/create", {
       user: { client_user_id: opts.userId, legal_name: opts.fullName },
       client_name: "Sagolik Close",
-      products: ["auth", "identity"],
-      optional_products: ["transactions"],
+      products: ["identity"],
       country_codes: [opts.country.toUpperCase()],
       language: "en",
       webhook: this.cfg.webhookUrl,
-      institution_id: opts.institutionId || undefined,
-      hosted_link: { completion_redirect_uri: `${opts.redirectUri}?state=${encodeURIComponent(opts.state)}` },
+      hosted_link: { completion_redirect_uri: `${opts.redirectUri}?state=${encodeURIComponent(opts.state)}`, url_lifetime_seconds: 1800 },
     });
     if (!r.hosted_link_url) throw new ProviderError("plaid", "NO_HOSTED_LINK", "Bank connections are temporarily unavailable.");
     return { redirectUrl: r.hosted_link_url, state: r.link_token };
@@ -220,7 +234,33 @@ export class PlaidBankingProvider implements BankingProvider {
     await this.call("/item/remove", { access_token: accessToken });
   }
 
-  parseWebhook(_rawBody: string, _headers: Headers): NormalizedWebhook {
-    throw new WebhookRejectedError("plaid_webhook_verification_not_implemented");
+  async parseWebhook(rawBody: string, headers: Headers): Promise<NormalizedWebhook> {
+    const reason = await this.webhooks.verify(headers.get("plaid-verification"), rawBody);
+    if (reason) throw new WebhookRejectedError(reason);
+    let body: { webhook_type?: string; webhook_code?: string; item_id?: string; error?: { error_code?: string } | null; environment?: string };
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      throw new WebhookRejectedError("invalid_json");
+    }
+    if (!body.webhook_type || !body.webhook_code) throw new WebhookRejectedError("schema");
+    const data = { externalConnectionId: body.item_id ?? "", code: body.webhook_code, errorCode: body.error?.error_code ?? null };
+    // Plaid sends no event id; the verified body's hash identifies a delivery.
+    const base = { externalEventId: `plaid_${sha256Hex(rawBody)}`, occurredAt: new Date().toISOString(), data };
+    if (body.environment && body.environment !== this.cfg.env) return { ...base, eventType: "plaid.other_environment" };
+    if (body.webhook_type === "ITEM") {
+      switch (body.webhook_code) {
+        case "ERROR":
+          return { ...base, eventType: body.error?.error_code === "ITEM_LOGIN_REQUIRED" ? "bank.reauth_required" : "bank.error" };
+        case "PENDING_EXPIRATION":
+        case "PENDING_DISCONNECT":
+          return { ...base, eventType: "bank.reauth_required" };
+        case "LOGIN_REPAIRED":
+          return { ...base, eventType: "bank.repaired" };
+        case "USER_PERMISSION_REVOKED":
+          return { ...base, eventType: "bank.revoked" };
+      }
+    }
+    return { ...base, eventType: `plaid.${body.webhook_type.toLowerCase()}.${body.webhook_code.toLowerCase()}` };
   }
 }

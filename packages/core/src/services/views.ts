@@ -112,6 +112,12 @@ export const IDENTITY_STATUS_TEXT: Record<IdentityStatus, string> = {
   expired: "This verification expired. Please verify again.",
 };
 
+/** What the buyer still has to send for closing: what escrow still expects, or the estimate before escrow opens. */
+export function fundsStillNeeded(s: TransactionSnapshot, nowIso: string): number {
+  if (s.escrow) return Math.max(0, s.escrow.requiredAmount - s.escrow.receivedAmount);
+  return moneyView(s, [], nowIso).remainingAtClosing;
+}
+
 export const BANK_STATUS_TEXT: Record<BankConnectionStatus, string> = {
   not_connected: "Not connected.",
   connecting: "Waiting for your bank to confirm.",

@@ -67,10 +67,12 @@ export interface BankingProvider extends WebhookCapable {
   readonly info: ProviderInfo;
   readonly supportedCountries: readonly string[];
   readonly supportsPaymentInitiation: boolean;
+  /** True when the provider's own consent screen lets the person search for their bank (so we don't show a list). */
+  readonly providerChoosesInstitution: boolean;
 
   listInstitutions(country: string): Promise<Institution[]>;
   getInstitution(id: string): Promise<Institution | null>;
-  connectBank(opts: { userId: string; fullName: string; institutionId: string; country: string; redirectUri: string; state: string }): Promise<ConnectStart>;
+  connectBank(opts: { userId: string; fullName: string; institutionId?: string; country: string; redirectUri: string; state: string }): Promise<ConnectStart>;
   exchangeAuthorization(opts: { code: string; state: string }): Promise<ExchangeResult>;
   listAccounts(accessToken: string): Promise<ProviderAccount[]>;
   getAccount(accessToken: string, externalAccountId: string): Promise<ProviderAccount | null>;

@@ -15,8 +15,10 @@ HEALTH_PORT="${HEALTH_PORT:-58081}"
 RUN_AS=()
 if [ "$(id -u)" = "0" ]; then RUN_AS=(runuser -u postgres --); chown postgres "$WORK"; fi
 SERVICE_PID=""
+PLAID_PID=""
 cleanup() {
   [ -n "$SERVICE_PID" ] && kill "$SERVICE_PID" 2>/dev/null || true
+  [ -n "$PLAID_PID" ] && kill "$PLAID_PID" 2>/dev/null || true
   "${RUN_AS[@]}" "$PG_BIN/pg_ctl" -D "$WORK/data" -m immediate stop >/dev/null 2>&1 || true
   rm -rf "$WORK"
 }
@@ -40,6 +42,15 @@ fs.writeFileSync(dir + "/jwks.json", JSON.stringify({ keys: [{ kty: "OKP", crv: 
 ' "$WORK/certs"
 
 go build -o "$WORK/money" ./cmd/money
+# Stand-in Plaid API (same request/response shapes as Plaid's reference).
+go build -o "$WORK/plaidfake" ./cmd/plaidfake
+"$WORK/plaidfake" > "$WORK/plaid.url" 2>"$WORK/plaid.log" &
+PLAID_PID=$!
+for _ in $(seq 1 50); do [ -s "$WORK/plaid.url" ] && break; sleep 0.1; done
+PLAID_URL="$(head -1 "$WORK/plaid.url")"
+printf 'test-secret' > "$WORK/certs/plaid-secret" && chmod 600 "$WORK/certs/plaid-secret"
+MONEY_PLAID_ENV=sandbox MONEY_PLAID_CLIENT_ID=test-client-id MONEY_PLAID_SECRET_FILE="$WORK/certs/plaid-secret" \
+MONEY_PLAID_BASE_URL="$PLAID_URL" MONEY_PLAID_REDIRECT_URI="http://localhost:3000/api/v1/bank-connections/callback" \
 MONEY_ENV=local \
 MONEY_LISTEN_ADDR="127.0.0.1:$API_PORT" MONEY_HEALTH_ADDR="127.0.0.1:$HEALTH_PORT" \
 MONEY_DATABASE_URL="postgres://postgres@/money?host=$WORK&port=$PGPORT&sslmode=disable" MONEY_MIGRATE_ON_START=true \
@@ -55,7 +66,7 @@ cd "$REPO"
 set +e
 MONEY_IT_URL="https://localhost:$API_PORT" \
 MONEY_IT_CA="$WORK/certs/ca.pem" MONEY_IT_CERT="$WORK/certs/web.pem" MONEY_IT_KEY="$WORK/certs/web-key.pem" \
-MONEY_IT_SIGNING_JWK="$WORK/certs/signing.jwk" \
+MONEY_IT_SIGNING_JWK="$WORK/certs/signing.jwk" MONEY_IT_PLAID_FAKE="$PLAID_URL" \
   npx vitest run packages/core/src/money/money.integration.test.ts
 status=$?
 set -e

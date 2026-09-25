@@ -6,7 +6,7 @@
  * real pipeline. Disabled entirely outside demo mode.
  */
 import { can } from "@sagolik/auth";
-import { accessContext, badRequest, forbidden, getRuntime, getTransaction } from "@sagolik/core";
+import { accessContext, badRequest, completeBankConnection, forbidden, getRuntime, getTransaction, toAppError } from "@sagolik/core";
 import { redirect } from "next/navigation";
 import type { ActionState } from "@/components/forms";
 import { formString, runAction } from "@/lib/server/action";
@@ -53,11 +53,18 @@ export async function approveBankConsentSandbox(_p: ActionState, fd: FormData): 
   const pending = mocks.banking?.pendingConsent(state);
   if (!pending || pending.userId !== actor.userId) return { ok: false, error: "This bank connection request has expired. Please start again.", code: "not_found" };
   const code = mocks.banking!.approveConsent(state);
-  const rt = await getRuntime();
-  const back = new URL("/api/v1/bank-connections/callback", rt.env.APP_URL);
-  back.searchParams.set("state", state);
-  back.searchParams.set("code", code);
-  redirect(back.pathname + back.search);
+  // A real provider sends the browser back to /api/v1/bank-connections/callback with a GET.
+  // A server action can't redirect into a route handler, so the sandbox finishes the same
+  // way the callback does (completeBankConnection) and then goes to the page it would.
+  const { ctx } = await requireContext();
+  let dest: string;
+  try {
+    const conn = await completeBankConnection(ctx, state, code);
+    dest = conn.transactionId ? `/app/transactions/${conn.transactionId}/money?bank=connected` : "/app/settings/banks?bank=connected";
+  } catch (e) {
+    dest = `/app/settings/banks?bank_error=${encodeURIComponent(toAppError(e).userMessage)}`;
+  }
+  redirect(dest);
 }
 
 export async function completeIdentitySandbox(_p: ActionState, fd: FormData): Promise<ActionState> {

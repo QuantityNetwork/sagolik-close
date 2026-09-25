@@ -6,3 +6,4 @@ export * from "./uploads";
 export * from "./fraud";
 export * from "./headers";
 export * from "./assertion";
+export * from "./plaid-webhook";
