@@ -285,6 +285,9 @@ func TestServiceEndToEnd(t *testing.T) {
 	if conn["status"] != "connected" || len(accts) != 2 || checking["ownershipMatched"] != true || checking["mask"] != "0000" {
 		t.Fatalf("connection: %v", conn)
 	}
+	if strings.Contains(fmt.Sprint(conn["accounts"]), "3333") {
+		t.Fatalf("credit accounts must not be kept (their available amount is a credit limit): %v", conn["accounts"])
+	}
 	if strings.Contains(fmt.Sprint(body), "access-sandbox") || strings.Contains(fmt.Sprint(body), "item-") {
 		t.Fatalf("token or item id leaked: %v", body)
 	}

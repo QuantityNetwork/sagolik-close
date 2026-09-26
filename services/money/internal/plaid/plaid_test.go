@@ -56,7 +56,7 @@ func TestHostedLinkFlow(t *testing.T) {
 		t.Fatalf("item: %v %+v", err, item)
 	}
 	ids, err := c.Identity(ctx, at)
-	if err != nil || len(ids) != 2 || ids[0].Owners[0] != "Olivia Carter" || ids[0].Mask != "0000" {
+	if err != nil || len(ids) != 3 || ids[0].Owners[0] != "Olivia Carter" || ids[0].Mask != "0000" {
 		t.Fatalf("identity: %v %+v", err, ids)
 	}
 	bals, err := c.Balances(ctx, at, "acc_checking")

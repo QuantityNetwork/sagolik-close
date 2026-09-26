@@ -2,7 +2,7 @@
 
 Isolated service that will own bank tokens, payment instructions, provider events and the funds-tracking ledger for Sagolik Close. It never holds client funds. Design: [docs/money-service.md](../../docs/money-service.md).
 
-**Status: M1 (foundation), M2 (instructions and ledger) and M3 (Plaid) complete.** The web app uses it when `MONEY_SERVICE_URL` is set. M3 has been tested against a stand-in Plaid API built from Plaid's reference; run the live sandbox test (below) with your own keys before going live.
+**Status: M1 (foundation), M2 (instructions and ledger) and M3 (Plaid) complete.** The web app uses it when `MONEY_SERVICE_URL` is set. M3 is verified against Plaid's live sandbox: the automated live test, plus a Hosted Link session completed by a person and finished with this client (public token from `/link/token/get`, exchange, Identity, Balance, removal).
 
 ## What M1 provides
 

@@ -14,8 +14,8 @@
  * MONEY_SERVICE_URL is set, bank connections go through the money service
  * instead and access tokens never reach the web app.
  *
- * Status: written against Plaid's documented API and tested against a
- * stand-in; run it against your Plaid sandbox keys before relying on it.
+ * Status: verified against Plaid's live sandbox (plaid.live.test.ts runs
+ * when PLAID_CLIENT_ID and PLAID_SECRET are set).
  */
 import type { Currency } from "@sagolik/types";
 import { type PlaidJwk, PlaidWebhookVerifier, sha256Hex } from "@sagolik/security";
@@ -171,7 +171,9 @@ export class PlaidBankingProvider implements BankingProvider {
   }
 
   private mapAccount(a: PlaidAccount): ProviderAccount {
-    const type = a.subtype === "checking" ? "checking" : a.subtype === "savings" ? "savings" : a.type === "investment" ? "investment" : "other";
+    // Cash (depository) accounts are checking or savings for our purposes; credit and loans are "other"
+    // (a credit card's "available" amount is its credit limit, not money the person holds).
+    const type = a.type === "depository" ? (a.subtype === "checking" ? "checking" : "savings") : a.type === "investment" ? "investment" : "other";
     return { externalAccountId: a.account_id, name: a.name, mask: (a.mask ?? "").slice(-4), currency: toCurrency(a.balances.iso_currency_code), type };
   }
 

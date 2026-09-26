@@ -15,6 +15,14 @@ function stubPlaid() {
     const body = JSON.parse(init.body) as Record<string, unknown>;
     requests.push({ path, body });
     const json = (status: number, v: unknown) => new Response(JSON.stringify(v), { status, headers: { "content-type": "application/json" } });
+    if (path === "/accounts/get")
+      return json(200, {
+        accounts: [
+          { account_id: "a1", name: "Plaid Checking", mask: "0000", type: "depository", subtype: "checking", balances: { available: 100, current: 110, iso_currency_code: "USD" } },
+          { account_id: "a2", name: "Plaid Money Market", mask: "4444", type: "depository", subtype: "money market", balances: { available: 43200, current: 43200, iso_currency_code: "USD" } },
+          { account_id: "a3", name: "Plaid Credit Card", mask: "3333", type: "credit", subtype: "credit card", balances: { available: 1000000, current: 410, iso_currency_code: "USD" } },
+        ],
+      });
     if (path === "/link/token/create") return json(200, { link_token: "link-sandbox-1", hosted_link_url: "https://hosted.plaid.com/link/1", expiration: "2026-09-25T13:00:00Z" });
     if (path === "/webhook_verification_key/get") {
       if (body.key_id !== KID) return json(400, { error_type: "INVALID_INPUT", error_code: "INVALID_WEBHOOK_VERIFICATION_KEY_ID" });
@@ -42,6 +50,15 @@ describe("Plaid adapter", () => {
     expect(body).not.toHaveProperty("optional_products");
     expect(body.hosted_link).toEqual({ completion_redirect_uri: "https://close.example/cb?state=conn-1", url_lifetime_seconds: 1800 });
     expect(plaid.providerChoosesInstitution).toBe(true);
+  });
+
+  it("treats cash accounts as checking/savings and credit as other", async () => {
+    const { plaid } = stubPlaid();
+    expect((await plaid.listAccounts("access-sandbox-1")).map((a) => [a.mask, a.type])).toEqual([
+      ["0000", "checking"],
+      ["4444", "savings"],
+      ["3333", "other"],
+    ]);
   });
 
   it("verifies and maps webhooks", async () => {

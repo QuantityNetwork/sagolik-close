@@ -156,7 +156,8 @@ async function syncAccounts(ctx: ServiceContext, conn: BankConnection, accessTok
   ]);
   const now = nowIso(ctx);
   const existing = await ctx.writer.bank_accounts.find({ connectionId: conn.id });
-  for (const a of accounts) {
+  // Closing funds come from cash accounts only; credit cards, loans and investments aren't kept.
+  for (const a of accounts.filter((x) => x.type === "checking" || x.type === "savings")) {
     const bal = balances.find((b) => b.externalAccountId === a.externalAccountId);
     const own = ownership.find((o) => o.externalAccountId === a.externalAccountId);
     const patch = {

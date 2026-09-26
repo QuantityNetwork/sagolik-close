@@ -1,6 +1,6 @@
 # Money service (Go) — design
 
-Status: **M1, M2 and M3 implemented** in `services/money` (see its README). M3 is tested against a stand-in Plaid API and awaits a run with real sandbox keys. M4 onwards not started. Decisions this design rests on: **US first**, and Sagolik Close stays **an orchestration layer only**. It never holds, receives or moves client funds.
+Status: **M1, M2 and M3 implemented** in `services/money` (see its README). M3 is verified against Plaid's live sandbox. M4 onwards not started. Decisions this design rests on: **US first**, and Sagolik Close stays **an orchestration layer only**. It never holds, receives or moves client funds.
 
 ## 1. What "orchestration only" means for money in the US
 
@@ -168,6 +168,7 @@ The rules already exist in `packages/core/src/services/{banking,payments,escrow}
 ## 9b. What M3 delivered
 
 - **Hosted Link.** The buyer starts from the closing's Money page and goes to Plaid, where they pick their bank and consent. Plaid sends them back to the web app's callback with `?link=…`; the web app asks the money service to finish. Only the person who started a link, in the same closing, can finish it, and finishing twice returns the same connection.
+- **Cash accounts only.** Plaid also returns credit cards, loans and mortgages; their "available" amount is borrowing capacity. Only depository accounts are kept and can show funds (found in the live sandbox run).
 - **Ownership.** The account holder names from Plaid Identity are compared with the buyer's name (the same loose rule as the web app). Names are not stored; only the result is.
 - **Proof of funds.** A real-time Balance call compares the account's available balance with what the closing still needs. The amount comes from the transaction (escrow's outstanding amount, or the estimate before escrow opens), never from the request. The buyer sees their balance; escrow and title see only "covers / doesn't cover $X" on the Money page. At most five checks per account per hour.
 - **Tokens.** Sealed with envelope encryption; the only value in the bank tables that can change, and only to be destroyed. Disconnecting (step-up) revokes the Item at Plaid first.

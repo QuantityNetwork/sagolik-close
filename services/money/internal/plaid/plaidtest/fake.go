@@ -171,6 +171,9 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 				"balances": map[string]any{"available": f.Available, "current": f.Available + 100, "iso_currency_code": "USD"}, "owners": owners},
 			map[string]any{"account_id": "acc_savings", "name": "Plaid Saving", "mask": "1111", "type": "depository", "subtype": "savings",
 				"balances": map[string]any{"available": 200, "current": 210, "iso_currency_code": "USD"}, "owners": owners},
+			// Like Plaid's sandbox bank: credit accounts come back too; "available" is the credit limit.
+			map[string]any{"account_id": "acc_credit", "name": "Plaid Credit Card", "mask": "3333", "type": "credit", "subtype": "credit card",
+				"balances": map[string]any{"available": 1000000, "current": 410, "iso_currency_code": "USD"}, "owners": owners},
 		}
 	case "/item/remove":
 		it, ok := item()

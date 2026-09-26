@@ -102,7 +102,7 @@ docs/             Architecture, data model, security, threat model, integrations
 | Area | State |
 | --- | --- |
 | Domain model, state machine, RLS, services, web app, demo | Implemented and tested |
-| Banking (Plaid) | Hosted Link, account ownership, proof of funds and signed webhooks, in the web app and in the Go money service. Tested against a stand-in Plaid API; add sandbox keys to run the live test (`services/money/README.md`) |
+| Banking (Plaid) | Hosted Link, account ownership, proof of funds and signed webhooks, in the web app and in the Go money service. Verified against Plaid's live sandbox, including a Hosted Link session completed by a person. Production needs Plaid's approval and production keys |
 | Email (Resend), SMS (Twilio) | Adapters written against the providers' documented APIs; not yet run against live accounts |
 | Identity (e.g. Persona), e-signature (e.g. DocuSign), payments and escrow partner | Interfaces and sandbox adapters are implemented. Production adapters are **not yet written**, and production start-up refuses to run on sandbox adapters. |
 | Property data, mortgage, title, insurance | Manual adapters, where professionals enter the data |

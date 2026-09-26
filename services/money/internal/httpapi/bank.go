@@ -224,9 +224,15 @@ func (s *Server) completeBankLink(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"connection": conn})
 }
 
+// accountsWithOwnership keeps cash (depository) accounts only: closing funds are
+// wired from them. Credit cards, loans and mortgages are dropped, since their
+// "available" amount is borrowing capacity, not money the buyer holds.
 func accountsWithOwnership(accts []plaid.Account, legalName string) []store.NewAccount {
 	out := make([]store.NewAccount, 0, len(accts))
 	for _, a := range accts {
+		if a.Type != "depository" {
+			continue
+		}
 		name := a.Name
 		if len(name) > 200 {
 			name = name[:200]
@@ -373,6 +379,10 @@ func (s *Server) proofOfFunds(w http.ResponseWriter, r *http.Request) {
 	}
 	if acct == nil {
 		writeError(w, r, http.StatusConflict, "conflict", "Your bank didn't return this account. Please reconnect it.")
+		return
+	}
+	if acct.Type != "depository" {
+		writeError(w, r, http.StatusBadRequest, "bad_request", "Only checking and savings accounts can show funds for closing.")
 		return
 	}
 	if b.Currency != acct.Currency {
