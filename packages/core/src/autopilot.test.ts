@@ -15,6 +15,8 @@ import {
   updateFunding,
   updateObligation,
 } from "./services/autopilot";
+import { requireUser } from "./context";
+import { createTransaction } from "./services/transactions";
 import { createTestHarness } from "./testing";
 
 async function code(p: Promise<unknown>) {
@@ -56,6 +58,14 @@ describe("Property Autopilot — demo portfolio", () => {
       expect(await code(passportView(await h.as(who), DEMO_PASSPORTS.miami))).toBe("not_found");
       expect((await autopilotHome(await h.as(who))).properties).toHaveLength(0);
     }
+  });
+
+  it("never turns an owner into a closing professional", async () => {
+    const h = await createTestHarness();
+    const alex = await h.as("alex.morgan");
+    expect(requireUser(alex).memberships).toEqual([]); // the holdings LLC isn't a firm
+    const attempt = createTransaction(alex, { organizationId: DEMO_PORTFOLIO_ORG_ID, type: "purchase" as const, jurisdiction: "US-TX", currency: "USD" as const, salePrice: 100_000_00, creatorRole: "transaction_coordinator" as const, property: { addressLine1: "1 Test Way", city: "Austin", region: "TX", postalCode: "78701", country: "US", propertyType: "single_family" } });
+    expect(await code(attempt)).toBe("forbidden");
   });
 
   it("clears the anomaly once Alex reviews it, and logs each step once", async () => {

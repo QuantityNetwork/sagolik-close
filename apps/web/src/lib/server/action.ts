@@ -35,3 +35,15 @@ export function parseMoneyInput(v: string | undefined): number | undefined {
   const n = Number(v.replace(/[^0-9.]/g, ""));
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : undefined;
 }
+
+/**
+ * Exact money parsing for amounts people type ("2,870.50", "$14,200"): digits
+ * and at most two decimals, converted to integer minor units without floating
+ * point. Returns undefined when empty and null when it isn't an amount.
+ */
+export function parseAmount(v: string | undefined): number | undefined | null {
+  if (!v) return undefined;
+  const m = v.replace(/[\s$,]/g, "").match(/^(\d{1,12})(?:\.(\d{1,2}))?$/);
+  if (!m) return null;
+  return Number(m[1]) * 100 + Number((m[2] ?? "").padEnd(2, "0"));
+}

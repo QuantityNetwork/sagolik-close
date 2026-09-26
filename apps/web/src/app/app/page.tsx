@@ -1,4 +1,4 @@
-import { getRuntime, listTransactionsForActor, moneyView, roleLabel, transactionView } from "@sagolik/core";
+import { getRuntime, isOwnerOrganizationType, listTransactionsForActor, moneyView, roleLabel, transactionView } from "@sagolik/core";
 import { formatDate, greetingKey, translator } from "@sagolik/i18n";
 import { isPrincipal } from "@sagolik/auth";
 import { buttonClasses, Card, EmptyState, formatMoney, IconTile, ParticipantAvatar } from "@sagolik/ui";
@@ -26,12 +26,26 @@ export default async function HomePage() {
 
   if (!principal) {
     if (actor.memberships.length > 0 || active.length > 0) redirect("/app/command-center");
+    // Owners who aren't mid-closing land on their properties.
+    const ownerships = await rt.serviceDb.organization_members.find({ userId: actor.userId });
+    if (ownerships.length && (await rt.serviceDb.organizations.find({ id: ownerships.map((m) => m.organizationId) })).some((o) => isOwnerOrganizationType(o.type))) redirect("/app/autopilot");
     const closed = items.find((i) => i.snapshot.transaction.state === "closed");
     return (
       <div className="container-page py-10">
         <h1 className="text-[34px] text-navy-800">{t(greetingKey(new Date().getHours()), { name: actor.displayName.split(" ")[0]! })}</h1>
         <Card className="mt-8">
-          <EmptyState title="No active closings yet" icon={<FileText className="h-8 w-8" aria-hidden />} action={closed ? <Link href="/app/ownership" className={buttonClasses("primary")}>Open your Home Record</Link> : undefined}>
+          <EmptyState title="No active closings yet" icon={<FileText className="h-8 w-8" aria-hidden />} action={
+              closed ? (
+                <span className="flex flex-wrap justify-center gap-2">
+                  <Link href="/app/autopilot" className={buttonClasses("primary")}>
+                    Property Autopilot
+                  </Link>
+                  <Link href="/app/ownership" className={buttonClasses("secondary")}>
+                    Home Record
+                  </Link>
+                </span>
+              ) : undefined
+            }>
             When your agent, lender or escrow officer invites you to a transaction, it appears here. Invitations are sent to {actor.email}.
           </EmptyState>
         </Card>

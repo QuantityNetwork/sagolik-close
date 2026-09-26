@@ -34,6 +34,8 @@ export const RATE_LIMITS = {
   /** Credential endpoints: brute force / credential stuffing. */
   auth: { limit: 10, windowMs: 15 * 60_000 },
   stepUp: { limit: 5, windowMs: 15 * 60_000 },
+  /** Demo persona picker (demo mode only; no credentials involved). */
+  demoSignIn: { limit: 60, windowMs: 15 * 60_000 },
   apiRead: { limit: 300, windowMs: 60_000 },
   apiWrite: { limit: 60, windowMs: 60_000 },
   upload: { limit: 30, windowMs: 60_000 },

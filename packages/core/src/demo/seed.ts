@@ -884,7 +884,7 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
     for (const a of assessPortfolio(inputs).assessments) {
       for (const d of a.decisions) {
         const bill = d.billId ? bills.find((b) => b.id === d.billId) : undefined;
-        const at = bill && (bill.status === "paid_verified" || bill.status === "covered_by_escrow") ? `${bill.dueOn}T18:00:00.000Z` : day(-1, 6);
+        const at = bill?.status === "paid_verified" ? `${bill.dueOn}T18:00:00.000Z` : day(-1, 6); // history on its payment date; the rest as of yesterday
         add("autopilot_decisions", { id: did(`decision:${a.passportId}:${d.key}`), organizationId: orgId, passportId: a.passportId, obligationId: d.obligationId, billId: d.billId, outcome: d.outcome, severity: d.severity, summary: d.summary, reasons: d.reasons, rule: d.rule, amount: d.amount, currency: d.currency, evaluatedOn: at.slice(0, 10), dedupeKey: `${a.passportId}:${d.key}`, createdAt: at });
       }
     }

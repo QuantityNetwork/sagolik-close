@@ -13,7 +13,8 @@ const safeNext = safeRedirectPath;
 
 async function throttle(bucket: string) {
   const meta = await requestMeta();
-  const rl = await rateLimit(`${bucket}:${meta.ipAddress ?? "unknown"}`, bucket === "stepup" ? RATE_LIMITS.stepUp : RATE_LIMITS.auth);
+  const policy = bucket === "stepup" ? RATE_LIMITS.stepUp : bucket === "demo" ? RATE_LIMITS.demoSignIn : RATE_LIMITS.auth;
+  const rl = await rateLimit(`${bucket}:${meta.ipAddress ?? "unknown"}`, policy);
   if (!rl.allowed) return { ok: false as const, error: "Too many attempts. Please wait a few minutes and try again.", code: "rate_limited" };
   return null;
 }
@@ -23,7 +24,8 @@ async function throttle(bucket: string) {
 export async function demoSignIn(_prev: ActionState, fd: FormData): Promise<ActionState> {
   const rt = await getRuntime();
   if (!rt.env.demoMode) return { ok: false, error: "Demo sign-in is disabled in this environment.", code: "forbidden" };
-  const limited = await throttle("auth");
+  // No secret to guess here, and demo visitors switch personas often: its own, looser bucket.
+  const limited = await throttle("demo");
   if (limited) return limited;
   const persona = DEMO_PERSONAS.find((p) => p.key === formString(fd, "persona"));
   if (!persona) return { ok: false, error: "Choose one of the demo people.", code: "bad_request" };

@@ -20,6 +20,10 @@ With no Supabase configuration, the app starts in **demo mode**:
 
 Sign in at `/sign-in` and pick a persona. For example, **Olivia Carter** (buyer), **Jessica Morgan** (buyer's agent, with the command center), **Marcus Lee** (escrow officer) or **Platform admin**. For the business-acquisition beta, pick **Amara Okafor** (buyer of the fictional Blue Harbor Coffee Roasters).
 
+## Property Autopilot (after closing)
+
+When a closing completes, the property moves into Property Autopilot: Sagolik keeps its operating record (mortgage, taxes, insurance, HOA, utilities), forecasts what's due, checks paying accounts, flags unusual or duplicate bills and escrow conflicts, and shows whether each property is covered. It never pays bills or moves money. Sign in as **Alex Morgan** for a fictional five-property portfolio. See [docs/autopilot.md](docs/autopilot.md).
+
 ## Business acquisitions (beta)
 
 The same closing workflow can run a purchase of a company (US asset or equity deals). It has its own vocabulary, milestones (LOI signed → ownership transferred), documents (LOI, diligence report, disclosure schedules, lien search, funds-flow memo) and roles (M&A advisor, counsel, accountant). The rules match real estate: funds stay with a licensed escrow agent, and ownership is marked transferred only when counsel confirms the closing filings. See [docs/business-beta.md](docs/business-beta.md) and the public page at `/business`.
@@ -94,6 +98,7 @@ docs/             Architecture, data model, security, threat model, integrations
 - [Security](docs/security.md) and [threat model](docs/threat-model.md)
 - [Integrations](docs/integrations.md) and [provider adapters](docs/provider-adapters.md)
 - [Money service (Go) — design](docs/money-service.md)
+- [Property Autopilot](docs/autopilot.md)
 - [Compliance boundaries](docs/compliance-boundaries.md)
 - [Deployment](docs/deployment.md)
 
@@ -106,5 +111,6 @@ docs/             Architecture, data model, security, threat model, integrations
 | Email (Resend), SMS (Twilio) | Adapters written against the providers' documented APIs; not yet run against live accounts |
 | Identity (e.g. Persona), e-signature (e.g. DocuSign), payments and escrow partner | Interfaces and sandbox adapters are implemented. Production adapters are **not yet written**, and production start-up refuses to run on sandbox adapters. |
 | Property data, mortgage, title, insurance | Manual adapters, where professionals enter the data |
+| Property Autopilot | Phase 1 (monitor and verify) implemented and tested; bank-transaction matching and Plaid Liabilities are next. No payments, by design |
 | Business acquisitions | **Beta.** Workflow, data model, RLS, demo deal and web app are implemented and tested. No customers use it yet. |
 | Legal pages | Drafts; they need counsel review |

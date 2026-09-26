@@ -20,6 +20,7 @@ import {
   type MilestoneKey,
 } from "@sagolik/types";
 import { dealSubject, findTransition, getJurisdiction, isTerminal, type TransactionSnapshot } from "@sagolik/workflow";
+import { isOwnerOrganizationType } from "../memberships";
 import { type ServiceContext, requireUser } from "../context";
 import { AppError, badRequest, conflict, forbidden, notFound } from "../errors";
 import { audit, emit } from "../events";
@@ -65,6 +66,8 @@ export async function createTransaction(ctx: ServiceContext, raw: CreateTransact
   if (!actor.memberships.some((m) => m.organizationId === input.organizationId)) {
     throw forbidden("You can only open transactions for an organization you belong to.");
   }
+  const org = await ctx.writer.organizations.get(input.organizationId);
+  if (!org || isOwnerOrganizationType(org.type)) throw forbidden("Transactions are opened by a professional firm, not an owner portfolio.");
   const jurisdiction = getJurisdiction(input.jurisdiction);
   if (jurisdiction.availability === "planned" && !isFlagEnabled("international_markets", { overrides: ctx.flags, organizationId: input.organizationId })) {
     throw badRequest(`${jurisdiction.name} isn't available yet.`);

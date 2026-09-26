@@ -55,10 +55,11 @@ import { z } from "zod";
 import { type ServiceContext, isUser, requireUser } from "../context";
 import { badRequest, conflict, forbidden, notFound } from "../errors";
 import { audit } from "../events";
+import { OWNER_ORGANIZATION_TYPES } from "../memberships";
 import { newId, nowIso, today } from "../util";
 import { notify } from "./notifications";
 
-export const OWNER_ORG_TYPES = ["personal_portfolio", "holding_entity", "family_office", "property_manager"] as const;
+export const OWNER_ORG_TYPES = OWNER_ORGANIZATION_TYPES;
 export const OWNER_ORG_TYPE_LABELS: Record<(typeof OWNER_ORG_TYPES)[number], string> = {
   personal_portfolio: "Personal",
   holding_entity: "Holding entity",

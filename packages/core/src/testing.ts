@@ -8,6 +8,7 @@ import { createMemoryDb, type Db } from "@sagolik/database";
 import { createProviders, MOCK_SIGNATURE_HEADER, setMockWebhookSink } from "@sagolik/integrations";
 import { parseKeyRing } from "@sagolik/security";
 import type { Logger, ServiceContext } from "./context";
+import { professionalMemberships } from "./memberships";
 import { buildDemoData, DEMO_PERSONAS, loadDemoData } from "./demo/seed";
 import { registerReactions } from "./services/reactions";
 import { handleWebhook } from "./services/webhooks";
@@ -64,13 +65,13 @@ export async function createTestHarness(opts: { seed?: boolean; flags?: ServiceC
   const actorFor = async (userId: string, stepUp = false): Promise<Actor> => {
     const profile = await db.profiles.get(userId);
     if (!profile) throw new Error(`no profile ${userId}`);
-    const memberships = await db.organization_members.find({ userId });
+    const memberships = await professionalMemberships(db, userId);
     return {
       userId,
       email: profile.email,
       displayName: profile.fullName,
       isPlatformAdmin: profile.isPlatformAdmin,
-      memberships: memberships.map((m) => ({ organizationId: m.organizationId, role: m.role })),
+      memberships,
       stepUpAt: stepUp ? Date.now() : null,
       sessionId: "test-session",
       ipAddress: "203.0.113.10",

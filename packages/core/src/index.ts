@@ -16,6 +16,7 @@ export * from "./services/signatures";
 export * from "./services/identity";
 export * from "./services/banking";
 export * from "./services/autopilot";
+export * from "./memberships";
 export * from "./services/payments";
 export * from "./services/escrow";
 export * from "./services/closing";

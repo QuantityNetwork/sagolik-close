@@ -1,4 +1,4 @@
-import { getRuntime } from "@sagolik/core";
+import { getRuntime, isOwnerOrganizationType } from "@sagolik/core";
 import { translator } from "@sagolik/i18n";
 import { ParticipantAvatar } from "@sagolik/ui";
 import { LogOut } from "lucide-react";
@@ -12,21 +12,26 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const actor = await requireActor("/app");
   const rt = await getRuntime();
   const db = rt.serviceDb;
-  const [profile, participations, unread, records] = await Promise.all([
+  const [profile, participations, unread, records, allMemberships] = await Promise.all([
     db.profiles.get(actor.userId),
     db.transaction_participants.find({ userId: actor.userId, status: ["invited", "active"] }, { orderBy: "createdAt" }),
     db.notifications.count({ userId: actor.userId, readAt: null }),
     db.ownership_records.find({}),
+    db.organization_members.find({ userId: actor.userId }),
   ]);
   const t = translator(profile?.locale ?? "en");
   const professional = actor.memberships.length > 0 || participations.some((p) => !["buyer", "co_buyer", "seller", "co_seller"].includes(p.role));
   const primaryTx = participations[0]?.transactionId;
   const hasRecord = records.some((r) => r.ownerUserIds.includes(actor.userId));
+  // Owners: anyone with a Home Record or a membership in an owner portfolio.
+  const ownerOrgs = allMemberships.length ? (await db.organizations.find({ id: allMemberships.map((m) => m.organizationId) })).filter((o) => isOwnerOrganizationType(o.type)) : [];
+  const hasAutopilot = hasRecord || ownerOrgs.length > 0;
 
   const nav: NavItem[] = [
     { href: "/app", label: t("nav.home"), icon: "home", exact: true },
     ...(professional ? [{ href: "/app/command-center", label: t("nav.commandCenter"), icon: "command" as const }] : []),
     { href: "/app/transactions", label: t("nav.transactions"), icon: "transactions" },
+    ...(hasAutopilot ? [{ href: "/app/autopilot", label: t("nav.autopilot"), icon: "autopilot" as const }] : []),
     ...(hasRecord ? [{ href: "/app/ownership", label: t("nav.homeRecord"), icon: "record" as const }] : []),
     { href: "/app/notifications", label: t("nav.notifications"), icon: "notifications", badge: unread },
     { href: "/app/settings", label: t("nav.settings"), icon: "settings" },

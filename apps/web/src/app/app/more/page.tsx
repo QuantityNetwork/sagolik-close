@@ -12,6 +12,7 @@ export default async function MorePage() {
   const links: Array<[string, string, ProductIconName]> = [
     ["Transactions", "/app/transactions", "transactions"],
     ...(actor.memberships.length ? [["Command center", "/app/command-center", "dashboard"] as [string, string, ProductIconName]] : []),
+    ["Property Autopilot", "/app/autopilot", "property"],
     ["Home Record", "/app/ownership", "ownership"],
     ["Notifications", "/app/notifications", "notifications"],
     ["Profile", "/app/settings", "people"],

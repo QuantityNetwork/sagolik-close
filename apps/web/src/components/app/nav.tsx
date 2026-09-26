@@ -8,6 +8,7 @@ const ICONS = {
   transactions: "transactions",
   command: "dashboard",
   record: "ownership",
+  autopilot: "property",
   notifications: "notifications",
   settings: "settings",
   admin: "identity",
@@ -38,7 +39,7 @@ export function SidebarNav({ items }: { items: NavItem[] }) {
       {items.map((item) => {
         const active = isActive(pathname, item);
         return (
-          <li key={item.href}>
+          <li key={`${item.href}:${item.label}`}>
             <Link
               href={item.href}
               aria-current={active ? "page" : undefined}
@@ -66,7 +67,7 @@ export function BottomNav({ items }: { items: NavItem[] }) {
         {items.map((item) => {
           const active = isActive(pathname, item);
           return (
-            <li key={item.href}>
+            <li key={`${item.href}:${item.label}`}>
               <Link href={item.href} aria-current={active ? "page" : undefined} className={cn("relative flex flex-col items-center gap-0.5 py-2 text-[11px]", active ? "text-navy-800" : "text-ink-3")}>
                 <ProductIcon name={ICONS[item.icon]} tone={active ? "brand" : "mono"} size={22} />
                 {item.label}

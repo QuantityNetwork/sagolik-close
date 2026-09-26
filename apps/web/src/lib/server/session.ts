@@ -11,7 +11,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Actor } from "@sagolik/auth";
 import { LOCAL_SESSION_SECRET } from "@sagolik/config";
-import { getRuntime } from "@sagolik/core";
+import { getRuntime, professionalMemberships } from "@sagolik/core";
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies, headers } from "next/headers";
@@ -119,7 +119,8 @@ export async function buildActor(userId: string, sessionId: string, stepUpAt: nu
   const rt = await getRuntime();
   const profile = await rt.serviceDb.profiles.get(userId);
   if (!profile) return null;
-  const memberships = await rt.serviceDb.organization_members.find({ userId });
+  // Firm memberships only: owning property through a portfolio never grants professional access.
+  const memberships = await professionalMemberships(rt.serviceDb, userId);
   const meta = await requestMeta();
   const cookieStepUp = await stepUpFromCookie(userId);
   return {
@@ -127,7 +128,7 @@ export async function buildActor(userId: string, sessionId: string, stepUpAt: nu
     email: profile.email,
     displayName: profile.fullName,
     isPlatformAdmin: profile.isPlatformAdmin,
-    memberships: memberships.map((m) => ({ organizationId: m.organizationId, role: m.role })),
+    memberships,
     stepUpAt: Math.max(stepUpAt ?? 0, cookieStepUp ?? 0) || null,
     sessionId,
     ipAddress: meta.ipAddress,

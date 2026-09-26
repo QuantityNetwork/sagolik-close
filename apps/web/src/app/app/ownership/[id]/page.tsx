@@ -1,4 +1,5 @@
 import { addOwnershipItem, getOwnershipBook, toAppError } from "@sagolik/core";
+import { setUpAutopilotAction } from "@/app/actions/autopilot";
 import { formatDate } from "@sagolik/i18n";
 import { Card, CardBody, CardHeader, DefinitionList, Field, formatMoney, Input, Select } from "@sagolik/ui";
 import { BadgeCheck, FileText, Hammer, Receipt, ShieldCheck, Wrench } from "lucide-react";
@@ -36,6 +37,7 @@ export default async function HomeRecordPage({ params }: { params: Promise<{ id:
   }
   const { record, property, items, recording } = book;
   const isOwner = record.ownerUserIds.includes(actor.userId);
+  const passport = isOwner ? await ctx.writer.property_passports.findOne({ ownershipRecordId: record.id }) : null;
 
   return (
     <div className="container-page animate-rise py-8">
@@ -66,6 +68,29 @@ export default async function HomeRecordPage({ params }: { params: Promise<{ id:
           ) : null}
         </div>
       </div>
+
+      {isOwner ? (
+        <Card className="mt-6 border-teal-100 bg-teal-50/40">
+          <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+            <div>
+              <p className="font-medium text-navy-800">Property Autopilot</p>
+              <p className="text-[13px] text-ink-2">
+                {passport ? "Monitoring this home's costs, balances and due dates. Sagolik never pays or moves money." : "Keep this home running: Sagolik watches its costs and due dates and tells you what needs attention. It never pays or moves money."}
+              </p>
+            </div>
+            {passport ? (
+              <Link href={`/app/autopilot/${passport.id}`} className="text-sm font-medium text-navy-800 underline">
+                Open Autopilot
+              </Link>
+            ) : (
+              <ActionForm action={setUpAutopilotAction}>
+                <input type="hidden" name="ownershipRecordId" value={record.id} />
+                <SubmitButton pendingLabel="Preparing…">Set up Autopilot</SubmitButton>
+              </ActionForm>
+            )}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[1.5fr_1fr]">
         <Card>

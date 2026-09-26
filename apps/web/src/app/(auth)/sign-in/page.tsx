@@ -1,5 +1,5 @@
 import { safeRedirectPath } from "@sagolik/security";
-import { BUSINESS_PERSONA_KEYS, DEMO_PERSONAS, DEMO_PASSWORD, getRuntime } from "@sagolik/core";
+import { AUTOPILOT_PERSONA_KEYS, BUSINESS_PERSONA_KEYS, DEMO_PERSONAS, DEMO_PASSWORD, getRuntime } from "@sagolik/core";
 import { Alert, Card, CardBody, Field, Input, ParticipantAvatar } from "@sagolik/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -136,7 +136,8 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
                 </h2>
                 <p className="mt-1 text-sm text-ink-3">Fictional people on fictional transactions. Nothing is sent or moved.</p>
                 {[
-                  { key: "home", label: "Home closing", people: DEMO_PERSONAS.filter((p) => !BUSINESS_PERSONA_KEYS.includes(p.key)) },
+                  { key: "home", label: "Home closing", people: DEMO_PERSONAS.filter((p) => !BUSINESS_PERSONA_KEYS.includes(p.key) && !AUTOPILOT_PERSONA_KEYS.includes(p.key)) },
+                  { key: "autopilot", label: "After closing: Property Autopilot", people: DEMO_PERSONAS.filter((p) => AUTOPILOT_PERSONA_KEYS.includes(p.key)) },
                   { key: "business", label: "Business acquisition (beta)", people: DEMO_PERSONAS.filter((p) => BUSINESS_PERSONA_KEYS.includes(p.key)) },
                 ].map((group) => (
                   <div key={group.key} className="mt-5">
