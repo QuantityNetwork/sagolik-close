@@ -17,10 +17,11 @@ import {
   type Providers,
   setMockWebhookSink,
 } from "@sagolik/integrations";
-import { decryptField, type KeyRing, parseKeyRing } from "@sagolik/security";
+import { type KeyRing, parseKeyRing } from "@sagolik/security";
 import { newCorrelationId } from "@sagolik/audit";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { consoleLogger, type Logger, type ServiceContext } from "./context";
+import { restoreSandboxBanking } from "./demo/sandbox-bank";
 import { buildDemoData, loadDemoData } from "./demo/seed";
 import { registerReactions } from "./services/reactions";
 import { handleWebhook } from "./services/webhooks";
@@ -123,22 +124,7 @@ async function hydrateSandboxProviders(rt: Runtime) {
       });
     }
   }
-  if (banking) {
-    for (const conn of await db.bank_connections.find({ provider: banking.info.id, status: ["connected", "reauthentication_required"] })) {
-      const secret = await db.bank_connection_secrets.findOne({ connectionId: conn.id });
-      const profile = await db.profiles.get(conn.userId);
-      if (!secret || !profile || !conn.externalConnectionId) continue;
-      const accounts = await db.bank_accounts.find({ connectionId: conn.id }, { orderBy: "createdAt" });
-      banking.seedConnection({
-        accessToken: decryptField(secret.encryptedAccessToken, rt.keyRing, `bank_connection:${conn.id}`),
-        externalConnectionId: conn.externalConnectionId,
-        institutionId: conn.institutionId,
-        ownerName: profile.fullName,
-        seed: 1,
-        masks: [accounts[0]?.mask ?? "0000", accounts[1]?.mask ?? "0001"],
-      });
-    }
-  }
+  if (banking) await restoreSandboxBanking(db, banking, rt.keyRing);
   if (payments) {
     for (const p of await db.payments.find({ provider: payments.info.id })) {
       if (p.externalPaymentId) payments.hydrate({ id: p.externalPaymentId, idempotencyKey: p.idempotencyKey, amount: p.amount, currency: p.currency, status: p.status });

@@ -72,6 +72,8 @@ func (e *Error) Message() string {
 		return "This bank doesn't share the information we need. Please try another account."
 	case "INVALID_LINK_TOKEN":
 		return "The bank connection expired before it finished. Please start again."
+	case "PRODUCT_NOT_READY":
+		return "Your bank is still preparing its transaction history. Please try again in a few minutes."
 	}
 	return "Something went wrong talking to your bank. Please try again."
 }
@@ -118,7 +120,7 @@ func (c *Client) call(ctx context.Context, path string, body map[string]any, out
 		}
 		return &Error{
 			Status: res.StatusCode, Type: pe.ErrorType, Code: pe.ErrorCode,
-			Retryable: res.StatusCode >= 500 || pe.ErrorCode == "RATE_LIMIT_EXCEEDED",
+			Retryable: res.StatusCode >= 500 || pe.ErrorCode == "RATE_LIMIT_EXCEEDED" || pe.ErrorCode == "PRODUCT_NOT_READY",
 			Reconnect: reconnectCodes[pe.ErrorCode],
 		}
 	}
@@ -134,6 +136,9 @@ type LinkRequest struct {
 	LegalName    string // optional
 	RedirectURI  string // where Plaid sends the person when they finish
 	WebhookURL   string // optional; Plaid's webhooks for this Item
+	// OptionalProducts ("transactions", "liabilities") are requested as optional:
+	// Plaid bills them only once used. Opt-in per deployment.
+	OptionalProducts []string
 }
 
 // LinkToken is a started Hosted Link session.
@@ -159,6 +164,14 @@ func (c *Client) CreateHostedLink(ctx context.Context, r LinkRequest) (LinkToken
 	}
 	if r.WebhookURL != "" {
 		body["webhook"] = r.WebhookURL
+	}
+	if len(r.OptionalProducts) > 0 {
+		body["optional_products"] = r.OptionalProducts
+		for _, p := range r.OptionalProducts {
+			if p == "transactions" {
+				body["transactions"] = map[string]any{"days_requested": 180}
+			}
+		}
 	}
 	var out struct {
 		LinkToken     string    `json:"link_token"`
@@ -346,6 +359,97 @@ func (c *Client) Balances(ctx context.Context, accessToken redact.Secret, accoun
 func (c *Client) RemoveItem(ctx context.Context, accessToken redact.Secret) error {
 	var out struct{}
 	return c.call(ctx, "/item/remove", map[string]any{"access_token": accessToken.Reveal()}, &out)
+}
+
+// Transaction is a posted bank transaction. Amount is minor units, negative = money leaving the account.
+type Transaction struct {
+	ID          string
+	AccountID   string
+	Date        string
+	Description string
+	Amount      int64
+}
+
+// Transactions returns posted transactions between from and to (YYYY-MM-DD), up to 1,000.
+func (c *Client) Transactions(ctx context.Context, accessToken redact.Secret, from, to string) ([]Transaction, error) {
+	var out []Transaction
+	for offset := 0; offset < 1000; {
+		var page struct {
+			Total        int `json:"total_transactions"`
+			Transactions []struct {
+				ID           string  `json:"transaction_id"`
+				AccountID    string  `json:"account_id"`
+				Date         string  `json:"date"`
+				Name         string  `json:"name"`
+				MerchantName *string `json:"merchant_name"`
+				Amount       float64 `json:"amount"`
+				Pending      bool    `json:"pending"`
+			} `json:"transactions"`
+		}
+		body := map[string]any{"access_token": accessToken.Reveal(), "start_date": from, "end_date": to, "options": map[string]any{"count": 500, "offset": offset}}
+		if err := c.call(ctx, "/transactions/get", body, &page); err != nil {
+			return nil, err
+		}
+		for _, t := range page.Transactions {
+			if t.Pending {
+				continue // pending amounts can still change
+			}
+			desc := t.Name
+			if t.MerchantName != nil && *t.MerchantName != "" {
+				desc = *t.MerchantName + " " + t.Name
+			}
+			amt := t.Amount
+			// Plaid: positive = money leaving the account; ours is the opposite.
+			out = append(out, Transaction{ID: t.ID, AccountID: t.AccountID, Date: t.Date, Description: desc, Amount: -*cents(&amt)})
+		}
+		offset += len(page.Transactions)
+		if len(page.Transactions) == 0 || offset >= page.Total {
+			break
+		}
+	}
+	return out, nil
+}
+
+// Mortgage is the lender's view of a mortgage (Plaid Liabilities). Amounts in minor units.
+type Mortgage struct {
+	AccountID          string
+	NextPaymentDueOn   *string
+	NextMonthlyPayment *int64
+	EscrowBalance      *int64
+	PropertyStreet     *string
+}
+
+// Mortgages returns the mortgages on an Item (none when the bank reports none).
+func (c *Client) Mortgages(ctx context.Context, accessToken redact.Secret) ([]Mortgage, error) {
+	var out struct {
+		Liabilities struct {
+			Mortgage []struct {
+				AccountID          string   `json:"account_id"`
+				NextPaymentDueDate *string  `json:"next_payment_due_date"`
+				NextMonthlyPayment *float64 `json:"next_monthly_payment"`
+				EscrowBalance      *float64 `json:"escrow_balance"`
+				PropertyAddress    *struct {
+					Street *string `json:"street"`
+				} `json:"property_address"`
+			} `json:"mortgage"`
+		} `json:"liabilities"`
+	}
+	if err := c.call(ctx, "/liabilities/get", map[string]any{"access_token": accessToken.Reveal()}, &out); err != nil {
+		var pe *Error
+		if errors.As(err, &pe) && (pe.Code == "NO_LIABILITY_ACCOUNTS" || pe.Code == "PRODUCTS_NOT_SUPPORTED") {
+			return []Mortgage{}, nil
+		}
+		return nil, err
+	}
+	res := make([]Mortgage, 0, len(out.Liabilities.Mortgage))
+	for _, m := range out.Liabilities.Mortgage {
+		mm := Mortgage{AccountID: m.AccountID, NextPaymentDueOn: m.NextPaymentDueDate, NextMonthlyPayment: cents(m.NextMonthlyPayment), EscrowBalance: cents(m.EscrowBalance)}
+		if m.PropertyAddress != nil {
+			mm.PropertyStreet = m.PropertyAddress.Street
+		}
+		res = append(res, mm)
+	}
+	return res, nil
 }
 
 // SandboxPublicToken creates an Item without the Link UI. Sandbox only; used by tests.

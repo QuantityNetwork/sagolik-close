@@ -39,6 +39,8 @@ type Fake struct {
 	OwnerName string            // name Identity returns for every account
 	Available float64           // available balance on the checking account
 	FailNext  map[string]string // path → Plaid error_code to return once
+	// Transactions returned by /transactions/get (Plaid shape and sign convention).
+	Transactions []map[string]any
 }
 
 type link struct {
@@ -175,6 +177,29 @@ func (f *Fake) serve(w http.ResponseWriter, r *http.Request) {
 			map[string]any{"account_id": "acc_credit", "name": "Plaid Credit Card", "mask": "3333", "type": "credit", "subtype": "credit card",
 				"balances": map[string]any{"available": 1000000, "current": 410, "iso_currency_code": "USD"}, "owners": owners},
 		}
+	case "/transactions/get":
+		if _, ok := item(); !ok {
+			return
+		}
+		all := []any{}
+		for _, t := range f.Transactions {
+			all = append(all, t)
+		}
+		opts, _ := body["options"].(map[string]any)
+		offset := 0
+		if o, ok := opts["offset"].(float64); ok {
+			offset = int(o)
+		}
+		end := min(offset+500, len(all))
+		if offset > len(all) {
+			offset = len(all)
+		}
+		out["total_transactions"], out["transactions"] = len(all), all[offset:end]
+	case "/liabilities/get":
+		if _, ok := item(); !ok {
+			return
+		}
+		out["liabilities"] = map[string]any{"mortgage": []any{map[string]any{"account_id": "acc_mortgage", "next_payment_due_date": "2027-05-01", "next_monthly_payment": 2980.0, "escrow_balance": 4210.5, "property_address": map[string]any{"street": "2210 Cedar Hollow Rd"}}}}
 	case "/item/remove":
 		it, ok := item()
 		if !ok {

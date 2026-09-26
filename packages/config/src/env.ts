@@ -31,6 +31,12 @@ const EnvSchema = z.object({
   PLAID_CLIENT_ID: optional,
   PLAID_SECRET: optional,
   PLAID_ENV: z.enum(["sandbox", "production"]).default("sandbox"),
+  /** Opt-in for Property Autopilot: "transactions,liabilities". Requested as optional products (billed by Plaid once used). */
+  PLAID_OPTIONAL_PRODUCTS: z
+    .string()
+    .optional()
+    .transform((v) => (v ?? "").split(",").map((x) => x.trim()).filter(Boolean))
+    .pipe(z.array(z.enum(["transactions", "liabilities"]))),
 
   TRUELAYER_CLIENT_ID: optional,
   TRUELAYER_CLIENT_SECRET: optional,

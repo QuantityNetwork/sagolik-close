@@ -39,6 +39,7 @@ type Store interface {
 	ListConnections(ctx context.Context, txID, userID string) ([]store.Connection, error)
 	AccessToken(ctx context.Context, env store.Sealer, connectionID string) (redact.Secret, error)
 	PlaidAccountID(ctx context.Context, connectionID, accountID string) (string, error)
+	AccountIDs(ctx context.Context, connectionID string) (map[string]string, error)
 	RecordRefresh(ctx context.Context, connectionID, actor string, accounts []store.NewAccount, requestID string) error
 	SetStatus(ctx context.Context, connectionID, status, source, detail, requestID string) error
 	Disconnect(ctx context.Context, connectionID, actor, source, requestID string) error
@@ -89,6 +90,8 @@ func (s *Server) APIHandler() http.Handler {
 	mux.HandleFunc("POST /v1/bank-connections/{cid}/refresh", s.authed(s.refreshBankConnection))
 	mux.HandleFunc("POST /v1/bank-connections/{cid}/accounts/{aid}/proof-of-funds", s.authed(s.proofOfFunds))
 	mux.HandleFunc("POST /v1/bank-connections/{cid}/disconnect", s.authed(s.disconnectBank))
+	mux.HandleFunc("GET /v1/bank-connections/{cid}/transactions", s.authed(s.bankTransactions))
+	mux.HandleFunc("GET /v1/bank-connections/{cid}/mortgages", s.authed(s.bankMortgages))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusNotFound, "not_found", "No such endpoint.")
 	})

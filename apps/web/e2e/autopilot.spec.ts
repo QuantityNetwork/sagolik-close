@@ -43,3 +43,24 @@ test("portfolios are private", async ({ page }) => {
   const res = await page.goto(url);
   expect(res?.status()).toBe(404);
 });
+
+test("bank activity confirms a payment and finds a cost nobody added", async ({ page }) => {
+  await signInAs(page, "alex.morgan");
+  const sections = page.getByRole("navigation", { name: "Property sections" });
+
+  await page.getByRole("link", { name: "Aspen Vacation Home" }).first().click();
+  await sections.getByRole("link", { name: /Bills/ }).click();
+  await expect(page.getByText("Marked as paid").first()).toBeVisible();
+  await page.getByRole("button", { name: "Check bank activity" }).click();
+  await expect(page.getByText(/Checked: 1 payment confirmed/)).toBeVisible();
+  await expect(page.getByText(/HIGH COUNTRY SERVICES BILLPAY/).first()).toBeVisible();
+
+  await page.goto("/app/autopilot");
+  await page.getByRole("link", { name: "Austin Rental #1" }).first().click();
+  await sections.getByRole("link", { name: /Bills/ }).click();
+  await page.getByRole("button", { name: "Check bank activity" }).click();
+  await expect(page.getByText(/1 recurring cost to confirm/)).toBeVisible();
+  await sections.getByRole("link", { name: /Costs/ }).click();
+  await expect(page.getByText("Greenleaf Lawn Care").first()).toBeVisible();
+  await expect(page.getByText("Suggested from your bank history.").first()).toBeVisible();
+});

@@ -19,10 +19,13 @@ describe("worker", () => {
     expect(Object.values(r.events).reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
     expect(await h.db.domain_events.count({ status: "pending" })).toBe(0);
     expect(await h.db.notifications.count({})).toBeGreaterThan(before);
+    // Bank activity (sandbox bank): the demo's snow removal, lawn care and lender figures.
+    expect(r.bankActivityChanges).toBeGreaterThanOrEqual(3);
 
     // Idempotent: a second tick finds nothing to do.
     const again = await tick(h.system("worker"));
     expect(Object.values(again.events).reduce((a, b) => a + b, 0)).toBe(0);
+    expect(again.bankActivityChanges).toBeNull(); // four times a day, not every tick
   }, 20_000);
 
   it("keeps looping after a failing tick and stops on abort", async () => {

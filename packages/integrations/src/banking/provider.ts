@@ -35,6 +35,16 @@ export interface ProviderBankTransaction {
   currency: Currency;
 }
 
+/** A mortgage as the lender reports it (Plaid Liabilities). Minor units. */
+export interface ProviderMortgage {
+  externalAccountId: string;
+  lenderName: string;
+  nextPaymentDueOn: string | null;
+  nextMonthlyPayment: number | null;
+  escrowBalance: number | null;
+  propertyStreet: string | null;
+}
+
 export interface OwnershipResult {
   externalAccountId: string;
   ownerNames: string[];
@@ -69,6 +79,8 @@ export interface BankingProvider extends WebhookCapable {
   readonly supportsPaymentInitiation: boolean;
   /** True when the provider's own consent screen lets the person search for their bank (so we don't show a list). */
   readonly providerChoosesInstitution: boolean;
+  /** Bank data beyond balances that this deployment may read (opt-in; some providers bill per product). */
+  readonly activityData?: { transactions: boolean; mortgages: boolean };
 
   listInstitutions(country: string): Promise<Institution[]>;
   getInstitution(id: string): Promise<Institution | null>;
@@ -78,6 +90,8 @@ export interface BankingProvider extends WebhookCapable {
   getAccount(accessToken: string, externalAccountId: string): Promise<ProviderAccount | null>;
   getBalances(accessToken: string): Promise<ProviderBalance[]>;
   getTransactions(accessToken: string, range: { from: string; to: string }): Promise<ProviderBankTransaction[]>;
+  /** Mortgages on this connection, when the provider supports lender data (Plaid Liabilities). */
+  getMortgages?(accessToken: string): Promise<ProviderMortgage[]>;
   verifyAccountOwnership(accessToken: string, expectedName: string): Promise<OwnershipResult[]>;
   refreshConnection(accessToken: string): Promise<{ status: "connected" | "reauthentication_required" | "expired" | "revoked" }>;
   disconnectBank(accessToken: string): Promise<void>;

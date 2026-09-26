@@ -50,6 +50,7 @@ for _ in $(seq 1 50); do [ -s "$WORK/plaid.url" ] && break; sleep 0.1; done
 PLAID_URL="$(head -1 "$WORK/plaid.url")"
 printf 'test-secret' > "$WORK/certs/plaid-secret" && chmod 600 "$WORK/certs/plaid-secret"
 MONEY_PLAID_ENV=sandbox MONEY_PLAID_CLIENT_ID=test-client-id MONEY_PLAID_SECRET_FILE="$WORK/certs/plaid-secret" \
+MONEY_PLAID_OPTIONAL_PRODUCTS=transactions,liabilities \
 MONEY_PLAID_BASE_URL="$PLAID_URL" MONEY_PLAID_REDIRECT_URI="http://localhost:3000/api/v1/bank-connections/callback" \
 MONEY_ENV=local \
 MONEY_LISTEN_ADDR="127.0.0.1:$API_PORT" MONEY_HEALTH_ADDR="127.0.0.1:$HEALTH_PORT" \

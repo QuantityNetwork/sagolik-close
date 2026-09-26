@@ -181,7 +181,7 @@ func bankConfig(cfg config.Config, getenv func(string) string) (httpapi.BankConf
 		client.BaseURL = base
 	}
 	return httpapi.BankConfig{
-		Plaid: client, Environment: cfg.PlaidEnv, RedirectURI: cfg.PlaidRedirectURI, WebhookURL: cfg.PlaidWebhookURL,
+		Plaid: client, Environment: cfg.PlaidEnv, RedirectURI: cfg.PlaidRedirectURI, WebhookURL: cfg.PlaidWebhookURL, OptionalProducts: cfg.PlaidOptionalProducts,
 		Webhooks: &plaid.WebhookVerifier{Keys: client},
 	}, nil
 }

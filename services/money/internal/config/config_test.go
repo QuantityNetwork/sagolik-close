@@ -102,6 +102,7 @@ func TestPlaidConfig(t *testing.T) {
 			m["MONEY_ENV"], m["MONEY_PLAID_REDIRECT_URI"] = "staging", "http://close.example/cb"
 		},
 		"webhook without listener": func(m map[string]string) { m["MONEY_PLAID_WEBHOOK_URL"] = "https://hooks.example/webhooks/plaid" },
+		"unknown optional product": func(m map[string]string) { m["MONEY_PLAID_OPTIONAL_PRODUCTS"] = "transactions,transfer" },
 	}
 	for name, mutate := range cases {
 		m := plaidOn(base())
@@ -111,6 +112,11 @@ func TestPlaidConfig(t *testing.T) {
 		}
 	}
 	m := plaidOn(base())
+	m["MONEY_PLAID_OPTIONAL_PRODUCTS"] = " transactions , liabilities "
+	if c, err := Load(env(m)); err != nil || strings.Join(c.PlaidOptionalProducts, ",") != "transactions,liabilities" {
+		t.Fatalf("optional products: %v %v", err, c.PlaidOptionalProducts)
+	}
+	m = plaidOn(base())
 	delete(m, "MONEY_PLAID_SECRET_FILE")
 	m["MONEY_PLAID_SECRET"] = "very-secret-value"
 	c, err = Load(env(m))

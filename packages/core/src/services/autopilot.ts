@@ -96,7 +96,7 @@ async function myOwnerOrgs(ctx: ServiceContext): Promise<Array<{ org: Organizati
   return orgs.filter(isOwnerOrg).map((org) => ({ org, role: memberships.find((m) => m.organizationId === org.id)!.role }));
 }
 
-async function passportInScope(ctx: ServiceContext, passportId: string, level: Level) {
+export async function passportInScope(ctx: ServiceContext, passportId: string, level: Level) {
   const passport = await ctx.writer.property_passports.get(passportId);
   if (!passport) throw notFound("That property");
   const role = await requireScope(ctx, passport.organizationId, level);

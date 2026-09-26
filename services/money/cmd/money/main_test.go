@@ -74,25 +74,31 @@ func TestServiceEndToEnd(t *testing.T) {
 
 	fake := plaidtest.New()
 	defer fake.Close()
+	fake.Transactions = []map[string]any{
+		{"transaction_id": "t1", "account_id": "acc_checking", "date": "2027-03-05", "name": "HIGH COUNTRY SERVICES", "amount": 450.0, "pending": false},
+		{"transaction_id": "t2", "account_id": "acc_checking", "date": "2027-03-06", "name": "PAYROLL", "amount": -3200.5, "pending": false},
+		{"transaction_id": "t3", "account_id": "acc_credit", "date": "2027-03-06", "name": "CARD PURCHASE", "amount": 12.0, "pending": false},
+	}
 	env := map[string]string{
-		"MONEY_PLAID_ENV":           "sandbox",
-		"MONEY_PLAID_CLIENT_ID":     plaidtest.ClientID,
-		"MONEY_PLAID_SECRET_FILE":   write("plaid-secret", []byte(plaidtest.Secret+"\n"), 0o600),
-		"MONEY_PLAID_BASE_URL":      fake.URL,
-		"MONEY_PLAID_REDIRECT_URI":  "https://close.example/api/v1/bank-connections/callback",
-		"MONEY_PLAID_WEBHOOK_URL":   "https://hooks.example/webhooks/plaid",
-		"MONEY_WEBHOOK_ADDR":        "127.0.0.1:0",
-		"MONEY_ENV":                 "local",
-		"MONEY_LISTEN_ADDR":         "127.0.0.1:0",
-		"MONEY_HEALTH_ADDR":         "127.0.0.1:0",
-		"MONEY_DATABASE_URL":        e2eURL,
-		"MONEY_MIGRATE_ON_START":    "true",
-		"MONEY_TLS_CERT_FILE":       write("server.pem", server.CertPEM, 0o600),
-		"MONEY_TLS_KEY_FILE":        write("server-key.pem", server.KeyPEM, 0o600),
-		"MONEY_TLS_CLIENT_CA_FILE":  write("ca.pem", ca.CertPEM, 0o600),
-		"MONEY_TLS_ALLOWED_CLIENTS": "spiffe://sagolik/web",
-		"MONEY_LOCAL_KEYRING_FILE":  write("keyring.json", keyring, 0o600),
-		"MONEY_ASSERTION_JWKS_FILE": write("jwks.json", []byte(jwks), 0o644),
+		"MONEY_PLAID_ENV":               "sandbox",
+		"MONEY_PLAID_CLIENT_ID":         plaidtest.ClientID,
+		"MONEY_PLAID_SECRET_FILE":       write("plaid-secret", []byte(plaidtest.Secret+"\n"), 0o600),
+		"MONEY_PLAID_BASE_URL":          fake.URL,
+		"MONEY_PLAID_REDIRECT_URI":      "https://close.example/api/v1/bank-connections/callback",
+		"MONEY_PLAID_WEBHOOK_URL":       "https://hooks.example/webhooks/plaid",
+		"MONEY_PLAID_OPTIONAL_PRODUCTS": "transactions,liabilities",
+		"MONEY_WEBHOOK_ADDR":            "127.0.0.1:0",
+		"MONEY_ENV":                     "local",
+		"MONEY_LISTEN_ADDR":             "127.0.0.1:0",
+		"MONEY_HEALTH_ADDR":             "127.0.0.1:0",
+		"MONEY_DATABASE_URL":            e2eURL,
+		"MONEY_MIGRATE_ON_START":        "true",
+		"MONEY_TLS_CERT_FILE":           write("server.pem", server.CertPEM, 0o600),
+		"MONEY_TLS_KEY_FILE":            write("server-key.pem", server.KeyPEM, 0o600),
+		"MONEY_TLS_CLIENT_CA_FILE":      write("ca.pem", ca.CertPEM, 0o600),
+		"MONEY_TLS_ALLOWED_CLIENTS":     "spiffe://sagolik/web",
+		"MONEY_LOCAL_KEYRING_FILE":      write("keyring.json", keyring, 0o600),
+		"MONEY_ASSERTION_JWKS_FILE":     write("jwks.json", []byte(jwks), 0o644),
 	}
 	ready := make(chan listening, 1)
 	done := make(chan error, 1)
@@ -315,6 +321,28 @@ func TestServiceEndToEnd(t *testing.T) {
 	}
 	if strings.Contains(fmt.Sprint(body), "25000000") {
 		t.Fatalf("balance leaked to escrow: %v", body)
+	}
+
+	// Bank activity (opt-in products): cash accounts only, money out is negative.
+	code, body = get("/v1/bank-connections/"+connID+"/transactions?days=90", tokenFor(buyer, "buyer", false))
+	txns, _ := body["transactions"].([]any)
+	if code != 200 || len(txns) != 2 {
+		t.Fatalf("transactions: %d %v", code, body)
+	}
+	first := txns[0].(map[string]any)
+	if first["accountId"] != checking["id"] || first["amount"].(float64) != -45_000 || first["description"] != "HIGH COUNTRY SERVICES" {
+		t.Fatalf("transaction: %v", first)
+	}
+	if txns[1].(map[string]any)["amount"].(float64) != 320_050 {
+		t.Fatalf("money in is positive: %v", txns[1])
+	}
+	if code, _ := get("/v1/bank-connections/"+connID+"/transactions", tokenFor(seller, "co_buyer", false)); code != 404 {
+		t.Fatalf("someone else must not read transactions: %d", code)
+	}
+	code, body = get("/v1/bank-connections/"+connID+"/mortgages", tokenFor(buyer, "buyer", false))
+	ms, _ := body["mortgages"].([]any)
+	if code != 200 || len(ms) != 1 || ms[0].(map[string]any)["nextMonthlyPayment"].(float64) != 298_000 || ms[0].(map[string]any)["escrowBalance"].(float64) != 421_050 {
+		t.Fatalf("mortgages: %d %v", code, body)
 	}
 
 	// Plaid webhooks: signature-checked, stored once, status follows.

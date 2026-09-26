@@ -5,7 +5,7 @@ import { HELD_BY_MONEY_SERVICE, moneyCaller } from "./bridge";
 import { MoneyServiceClient } from "./client";
 import { runF1Scenario } from "./scenario";
 import { loadSnapshot } from "../snapshot";
-import { checkFundsForClosing, completeMoneyBankLink, disconnectBank, proofOfFundsFor, startBankConnection } from "../services/banking";
+import { checkFundsForClosing, completeMoneyBankLink, disconnectBank, moneyConnectionId, proofOfFundsFor, startBankConnection } from "../services/banking";
 
 /**
  * Runs the same scenario with the real Go money service (mutual TLS, signed
@@ -82,6 +82,14 @@ describe.skipIf(!configured)("bank connections through Plaid (Go money service, 
     expect(proofs).toHaveLength(1);
     expect(proofs[0]).toMatchObject({ accountMask: "0000", ownershipMatched: true, sufficient: r.sufficient, requiredAmount: r.required });
     expect(JSON.stringify(proofs)).not.toContain("25000000");
+
+    // Property Autopilot reads (opt-in products): owner only, amounts in cents.
+    const ownerCaller = moneyCaller(olivia, s, "payment.initiate");
+    const moneyId = moneyConnectionId(conn)!;
+    expect((await money.bankTransactions(ownerCaller, moneyId, 90)).transactions).toEqual([]);
+    const { mortgages } = await money.bankMortgages(ownerCaller, moneyId);
+    expect(mortgages[0]).toMatchObject({ lenderName: "First Platypus Bank", nextMonthlyPayment: 298_000, escrowBalance: 421_050 });
+    await expect(money.bankTransactions(moneyCaller(await h.as("marcus.lee"), s, "transaction.view"), moneyId, 90)).rejects.toMatchObject({ status: 404 });
 
     const revoked = await disconnectBank(await h.as("olivia.carter", { stepUp: true }), conn.id);
     expect(revoked.status).toBe("revoked");

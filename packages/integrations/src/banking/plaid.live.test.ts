@@ -40,4 +40,36 @@ describe.skipIf(!id || !secret)("Plaid adapter (live sandbox)", () => {
     const fake = `${Buffer.from(JSON.stringify({ alg: "ES256", kid: "00000000-0000-0000-0000-000000000000" })).toString("base64url")}.e30.${"A".repeat(86)}`;
     await expect(plaid.parseWebhook("{}", new Headers({ "plaid-verification": fake }))).rejects.toBeInstanceOf(WebhookRejectedError);
   });
+
+  it("reads transactions and the lender's mortgage data (Property Autopilot add-ons)", { timeout: 120_000 }, async () => {
+    const plaid = new PlaidBankingProvider({ clientId: id!, secret: secret!, env: "sandbox", optionalProducts: ["transactions", "liabilities"] });
+    const res = await fetch("https://sandbox.plaid.com/sandbox/public_token/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ client_id: id, secret, institution_id: "ins_109508", initial_products: ["identity", "transactions", "liabilities"] }),
+    });
+    const { public_token } = (await res.json()) as { public_token: string };
+    const ex = await plaid.exchangeAuthorization({ code: public_token, state: "s" });
+    try {
+      const mortgages = await plaid.getMortgages(ex.accessToken);
+      expect(mortgages.length).toBeGreaterThan(0);
+      expect(mortgages[0]!.nextMonthlyPayment).toBeTypeOf("number");
+      // Transaction history can take a moment to be ready in the sandbox.
+      const to = new Date().toISOString().slice(0, 10);
+      const from = new Date(Date.now() - 180 * 86_400_000).toISOString().slice(0, 10);
+      let txns: Awaited<ReturnType<typeof plaid.getTransactions>> = [];
+      for (let i = 0; i < 20 && !txns.length; i++) {
+        try {
+          txns = await plaid.getTransactions(ex.accessToken, { from, to });
+        } catch (e) {
+          if ((e as { code?: string }).code !== "PRODUCT_NOT_READY") throw e;
+          await new Promise((r) => setTimeout(r, 3000));
+        }
+      }
+      expect(txns.length).toBeGreaterThan(0);
+      expect(txns.some((t) => t.amount < 0)).toBe(true);
+    } finally {
+      await plaid.disconnectBank(ex.accessToken);
+    }
+  });
 });

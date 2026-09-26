@@ -7,18 +7,23 @@
  * acts on them, so several instances can run safely — every row is claimed
  * with a conditional update before it is processed.
  */
-import { drainOutbox, retryFailedWebhooks, runAutopilotChecks, type ServiceContext } from "@sagolik/core";
+import { drainOutbox, retryFailedWebhooks, runAutopilotChecks, runBankActivityChecks, type ServiceContext } from "@sagolik/core";
 
 export interface TickResult {
   events: Record<string, number>;
   webhooksRetried: number;
   /** New Autopilot decisions logged this tick (null when the check didn't run). */
   autopilotDecisions: number | null;
+  /** Bills verified, costs suggested and lender updates from bank activity (null when it didn't run). */
+  bankActivityChanges: number | null;
 }
 
 /** Portfolio checks are idempotent but not free; once every 15 minutes is plenty for due dates. */
 export const AUTOPILOT_CHECK_INTERVAL_MS = 15 * 60_000;
 let lastAutopilotCheck = 0;
+/** Bank reads call the provider (and may be billed per call): four times a day. */
+export const BANK_ACTIVITY_INTERVAL_MS = 6 * 60 * 60_000;
+let lastBankActivityCheck = 0;
 
 export async function tick(ctx: ServiceContext, now = Date.now()): Promise<TickResult> {
   const events = await drainOutbox(ctx, 100);
@@ -28,7 +33,12 @@ export async function tick(ctx: ServiceContext, now = Date.now()): Promise<TickR
     lastAutopilotCheck = now;
     autopilotDecisions = await runAutopilotChecks(ctx);
   }
-  return { events, webhooksRetried, autopilotDecisions };
+  let bankActivityChanges: number | null = null;
+  if (now - lastBankActivityCheck >= BANK_ACTIVITY_INTERVAL_MS) {
+    lastBankActivityCheck = now;
+    bankActivityChanges = await runBankActivityChecks(ctx);
+  }
+  return { events, webhooksRetried, autopilotDecisions, bankActivityChanges };
 }
 
 export interface LoopOptions {

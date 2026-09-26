@@ -50,6 +50,22 @@ export interface MoneyInstruction {
   verificationMethod: string | null;
 }
 
+export interface MoneyBankTransaction {
+  id: string;
+  accountId: string;
+  date: string;
+  description: string;
+  amount: number;
+}
+
+export interface MoneyMortgage {
+  lenderName: string | null;
+  nextPaymentDueOn: string | null;
+  nextMonthlyPayment: number | null;
+  escrowBalance: number | null;
+  propertyStreet: string | null;
+}
+
 export interface MoneyBalance {
   currency: string;
   expected: number;
@@ -185,6 +201,16 @@ export class MoneyServiceClient {
       caller,
       body,
     );
+  }
+
+  /** Posted cash-account transactions (owner only; the deployment must opt in to Plaid Transactions). Amounts in cents, negative = money out. */
+  bankTransactions(caller: MoneyCaller, connectionId: string, days: number) {
+    return this.call<{ transactions: MoneyBankTransaction[] }>("GET", `/v1/bank-connections/${encodeURIComponent(connectionId)}/transactions?days=${days}`, caller);
+  }
+
+  /** The lender's mortgage figures (owner only; the deployment must opt in to Plaid Liabilities). */
+  bankMortgages(caller: MoneyCaller, connectionId: string) {
+    return this.call<{ mortgages: MoneyMortgage[] }>("GET", `/v1/bank-connections/${encodeURIComponent(connectionId)}/mortgages`, caller);
   }
 
   disconnectBank(caller: MoneyCaller, connectionId: string) {

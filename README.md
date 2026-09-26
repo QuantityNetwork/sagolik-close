@@ -111,6 +111,6 @@ docs/             Architecture, data model, security, threat model, integrations
 | Email (Resend), SMS (Twilio) | Adapters written against the providers' documented APIs; not yet run against live accounts |
 | Identity (e.g. Persona), e-signature (e.g. DocuSign), payments and escrow partner | Interfaces and sandbox adapters are implemented. Production adapters are **not yet written**, and production start-up refuses to run on sandbox adapters. |
 | Property data, mortgage, title, insurance | Manual adapters, where professionals enter the data |
-| Property Autopilot | Phase 1 (monitor and verify) implemented and tested; bank-transaction matching and Plaid Liabilities are next. No payments, by design |
+| Property Autopilot | Monitor and verify implemented and tested, including read-only bank activity (payments verified from posted transactions, recurring costs suggested, lender mortgage data; Plaid products opt-in). No payments, by design |
 | Business acquisitions | **Beta.** Workflow, data model, RLS, demo deal and web app are implemented and tested. No customers use it yet. |
 | Legal pages | Drafts; they need counsel review |

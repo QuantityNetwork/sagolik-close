@@ -10,6 +10,7 @@ import {
   type ProviderAccount,
   type ProviderBalance,
   type ProviderBankTransaction,
+  type ProviderMortgage,
   namesMatch,
 } from "./provider";
 
@@ -48,6 +49,16 @@ interface MockConnection {
   seed: number;
   /** Fixed account masks (seeded demo data). */
   masks?: [string, string];
+  /** Fully scripted demo data (accounts, balances, statement, lender data) instead of generated values. */
+  script?: MockBankScript;
+}
+
+/** Scripted sandbox data for a demo connection. Everything in it is fictional. */
+export interface MockBankScript {
+  accounts: ProviderAccount[];
+  balances: Record<string, number>;
+  transactions: ProviderBankTransaction[];
+  mortgages: ProviderMortgage[];
 }
 
 interface MockBankState {
@@ -74,6 +85,7 @@ export class MockBankingProvider extends MockProviderBase implements BankingProv
   readonly supportedCountries = ["US", "SE", "PL", "DE", "CH", "LI"] as const;
   readonly supportsPaymentInitiation = true;
   readonly providerChoosesInstitution = false;
+  readonly activityData = { transactions: true, mortgages: true };
   private state = globalSingleton<MockBankState>("mock_bank_state", () => ({ pending: new Map(), connections: new Map() }));
 
   constructor(
@@ -155,6 +167,7 @@ export class MockBankingProvider extends MockProviderBase implements BankingProv
   async listAccounts(accessToken: string): Promise<ProviderAccount[]> {
     const c = this.state.connections.get(accessToken);
     if (!c || c.revoked) throw new ProviderError(this.info.id, "ITEM_NOT_FOUND", "Your bank needs you to reconnect.", { action: "reconnect_bank" });
+    if (c.script) return c.script.accounts;
     const r = seeded(c.seed);
     const m1 = c.masks?.[0] ?? String(1000 + Math.floor(r() * 8999));
     const m2 = c.masks?.[1] ?? String(1000 + Math.floor(r() * 8999));
@@ -170,6 +183,10 @@ export class MockBankingProvider extends MockProviderBase implements BankingProv
 
   async getBalances(accessToken: string): Promise<ProviderBalance[]> {
     const c = this.conn(accessToken);
+    if (c.script) {
+      const asOf = new Date().toISOString();
+      return c.script.accounts.map((a) => ({ externalAccountId: a.externalAccountId, available: c.script!.balances[a.externalAccountId] ?? null, current: c.script!.balances[a.externalAccountId] ?? null, currency: a.currency, asOf }));
+    }
     const r = seeded(c.seed + 7);
     const asOf = new Date().toISOString();
     const accounts = await this.listAccounts(accessToken);
@@ -182,6 +199,7 @@ export class MockBankingProvider extends MockProviderBase implements BankingProv
 
   async getTransactions(accessToken: string, range: { from: string; to: string }): Promise<ProviderBankTransaction[]> {
     const c = this.conn(accessToken);
+    if (c.script) return c.script.transactions.filter((t) => t.date >= range.from && t.date <= range.to);
     const [acct] = await this.listAccounts(accessToken);
     const r = seeded(c.seed + 13);
     const out: ProviderBankTransaction[] = [];
@@ -199,6 +217,10 @@ export class MockBankingProvider extends MockProviderBase implements BankingProv
       });
     }
     return out;
+  }
+
+  async getMortgages(accessToken: string): Promise<ProviderMortgage[]> {
+    return this.conn(accessToken).script?.mortgages ?? [];
   }
 
   async verifyAccountOwnership(accessToken: string, expectedName: string): Promise<OwnershipResult[]> {
@@ -223,9 +245,10 @@ export class MockBankingProvider extends MockProviderBase implements BankingProv
   }
 
   /** Restores a connection for seeded demo data (the token is a fixed demo token). */
-  seedConnection(opts: { accessToken: string; externalConnectionId: string; institutionId: string; ownerName: string; seed: number; masks?: [string, string] }) {
+  seedConnection(opts: { accessToken: string; externalConnectionId: string; institutionId: string; ownerName: string; seed: number; masks?: [string, string]; script?: MockBankScript }) {
     const institution = INSTITUTIONS.find((i) => i.id === opts.institutionId)!;
-    if (this.state.connections.has(opts.accessToken)) return;
+    // Keep live state (e.g. a revoked connection), but let a scripted demo refresh its dates.
+    if (this.state.connections.has(opts.accessToken) && !opts.script) return;
     this.state.connections.set(opts.accessToken, {
       accessToken: opts.accessToken,
       externalConnectionId: opts.externalConnectionId,
@@ -235,6 +258,7 @@ export class MockBankingProvider extends MockProviderBase implements BankingProv
       revoked: false,
       seed: opts.seed,
       masks: opts.masks,
+      script: opts.script,
     });
   }
 }

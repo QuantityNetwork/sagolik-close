@@ -141,7 +141,7 @@ export default async function CostsPage({ params }: { params: Promise<{ id: stri
     <div className="space-y-6">
       {suggested.length ? (
         <Card className="border-attention/20">
-          <CardHeader title={`${suggested.length} ${suggested.length === 1 ? "cost" : "costs"} to confirm`} description="Found from your closing or documents. Sagolik doesn't monitor a cost until you confirm it's right." />
+          <CardHeader title={`${suggested.length} ${suggested.length === 1 ? "cost" : "costs"} to confirm`} description="Found from your closing, documents or bank history. Sagolik doesn't monitor a cost until you confirm it's right." />
         </Card>
       ) : null}
 

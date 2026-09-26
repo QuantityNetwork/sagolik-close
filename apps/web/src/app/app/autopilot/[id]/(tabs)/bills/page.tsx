@@ -1,7 +1,7 @@
 import { BILL_STATUS_LABELS } from "@sagolik/core";
 import { Card, CardBody, CardHeader, cn, Field, Input, Select, StatusBadge } from "@sagolik/ui";
 import type { Metadata } from "next";
-import { addBillAction, billStatusAction, markBillPaidAction, reviewBillAction } from "@/app/actions/autopilot";
+import { addBillAction, billStatusAction, checkBankActivityAction, markBillPaidAction, reviewBillAction } from "@/app/actions/autopilot";
 import { ActionButton, ActionForm, SubmitButton } from "@/components/forms";
 import { money, SeverityTag, shortDate } from "@/components/app/autopilot";
 import { loadPassport } from "@/lib/server/autopilot";
@@ -128,46 +128,59 @@ export default async function BillsPage({ params }: { params: Promise<{ id: stri
       </Card>
 
       {view.canManage ? (
-        <Card className="h-fit">
-          <CardHeader title="Add a bill" description="Sagolik checks it immediately. It never pays it." />
-          <CardBody>
-            {costs.length ? (
-              <ActionForm action={addBillAction} className="space-y-3" resetOnSuccess>
+        <div className="space-y-6">
+          <Card>
+            <CardHeader title="Confirm payments from your bank" description="Sagolik reads posted transactions on the accounts linked to this property. A bill counts as paid (verified) only with the exact amount, the payee and a plausible date. Read-only: it never moves money, and statements aren't stored." />
+            <CardBody>
+              <ActionForm action={checkBankActivityAction}>
                 <input type="hidden" name="passportId" value={id} />
-                <Field label="Cost" htmlFor="obligationId">
-                  <Select id="obligationId" name="obligationId" required defaultValue="">
-                    <option value="" disabled>
-                      Choose…
-                    </option>
-                    {costs.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                        {o.status === "suggested" ? " (to confirm)" : ""}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Amount" htmlFor="amount">
-                    <Input id="amount" name="amount" inputMode="decimal" placeholder="243.81" required />
-                  </Field>
-                  <Field label="Due date" htmlFor="dueOn">
-                    <Input id="dueOn" name="dueOn" type="date" required />
-                  </Field>
-                </div>
-                <Field label="Period (optional)" htmlFor="periodLabel">
-                  <Input id="periodLabel" name="periodLabel" maxLength={60} placeholder="e.g. April 2027" />
-                </Field>
-                <Field label="Bill PDF or photo (optional)" htmlFor="file" hint="PDF, PNG or JPEG. Stored privately for this portfolio.">
-                  <Input id="file" name="file" type="file" accept="application/pdf,image/png,image/jpeg" />
-                </Field>
-                <SubmitButton pendingLabel="Checking…">Add bill</SubmitButton>
+                <SubmitButton variant="secondary" pendingLabel="Checking…">
+                  Check bank activity
+                </SubmitButton>
               </ActionForm>
-            ) : (
-              <p className="text-sm text-ink-3">Add the property's costs first (Costs tab).</p>
-            )}
-          </CardBody>
-        </Card>
+            </CardBody>
+          </Card>
+          <Card className="h-fit">
+            <CardHeader title="Add a bill" description="Sagolik checks it immediately. It never pays it." />
+            <CardBody>
+              {costs.length ? (
+                <ActionForm action={addBillAction} className="space-y-3" resetOnSuccess>
+                  <input type="hidden" name="passportId" value={id} />
+                  <Field label="Cost" htmlFor="obligationId">
+                    <Select id="obligationId" name="obligationId" required defaultValue="">
+                      <option value="" disabled>
+                        Choose…
+                      </option>
+                      {costs.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.label}
+                          {o.status === "suggested" ? " (to confirm)" : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <div className="grid grid-cols-2 gap-3">
+                    <Field label="Amount" htmlFor="amount">
+                      <Input id="amount" name="amount" inputMode="decimal" placeholder="243.81" required />
+                    </Field>
+                    <Field label="Due date" htmlFor="dueOn">
+                      <Input id="dueOn" name="dueOn" type="date" required />
+                    </Field>
+                  </div>
+                  <Field label="Period (optional)" htmlFor="periodLabel">
+                    <Input id="periodLabel" name="periodLabel" maxLength={60} placeholder="e.g. April 2027" />
+                  </Field>
+                  <Field label="Bill PDF or photo (optional)" htmlFor="file" hint="PDF, PNG or JPEG. Stored privately for this portfolio.">
+                    <Input id="file" name="file" type="file" accept="application/pdf,image/png,image/jpeg" />
+                  </Field>
+                  <SubmitButton pendingLabel="Checking…">Add bill</SubmitButton>
+                </ActionForm>
+              ) : (
+                <p className="text-sm text-ink-3">Add the property's costs first (Costs tab).</p>
+              )}
+            </CardBody>
+          </Card>
+        </div>
       ) : null}
     </div>
   );

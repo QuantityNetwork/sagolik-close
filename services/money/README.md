@@ -48,6 +48,7 @@ MONEY_PLAID_REDIRECT_URI=http://localhost:3000/api/v1/bank-connections/callback 
 | `MONEY_PLAID_CLIENT_ID` | Plaid client id. |
 | `MONEY_PLAID_SECRET_FILE` / `MONEY_PLAID_SECRET` | Exactly one. Prefer the file; the variable is for secrets injected by AWS Secrets Manager. |
 | `MONEY_PLAID_REDIRECT_URI` | The web app's `/api/v1/bank-connections/callback` (https outside local). Plaid returns the person there with `?link=…`. |
+| `MONEY_PLAID_OPTIONAL_PRODUCTS` | Optional, comma-separated `transactions` and/or `liabilities` for Property Autopilot (read-only). Requested as Plaid optional products; the `/transactions` and `/mortgages` endpoints answer 503 unless listed. |
 | `MONEY_WEBHOOK_ADDR`, `MONEY_PLAID_WEBHOOK_URL` | Optional. A separate listener for Plaid webhooks (no mTLS, since Plaid can't present a client certificate; every request is signature-checked). Put it behind the load balancer or WAF that terminates TLS. |
 
 ## Test and check
@@ -70,4 +71,4 @@ CI runs all of the above (the `money-service` job).
 
 Nothing in M1 or M2 needs a paid service or a contract. The local keyring is the default. AWS KMS is optional, pay-as-you-go per key and per request, with no commitment. Production refuses local keys unless you set `MONEY_ALLOW_LOCAL_KEYS_IN_PRODUCTION=true`, so file-based keys can only be used as a deliberate, recorded choice.
 
-Plaid: the sandbox is free. Production needs Plaid's approval and is billed by Plaid under the plan you choose (at the time of writing, Identity is charged per connected account and Balance per request; check Plaid's current pricing before going live). To keep that bill small, the service calls Balance only when the buyer asks for a funds check, at most five times per account per hour, and never polls.
+Plaid: the sandbox is free. Production needs Plaid's approval and is billed by Plaid under the plan you choose (at the time of writing, Identity is charged per connected account and Balance per request; check Plaid's current pricing before going live). To keep that bill small, the service calls Balance only when the buyer asks for a funds check, at most five times per account per hour, and never polls. Transactions and Liabilities are off unless `MONEY_PLAID_OPTIONAL_PRODUCTS` lists them; each read happens only when the account's owner asks (Check bank activity).

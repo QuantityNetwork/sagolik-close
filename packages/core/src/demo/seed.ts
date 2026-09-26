@@ -14,6 +14,7 @@ import { encryptField, type KeyRing, sha256Hex } from "@sagolik/security";
 import type { Bill, Obligation, Row, TableName } from "@sagolik/types";
 import { addMonths, assessPortfolio, defaultReviewPolicies, type PassportInput } from "@sagolik/workflow";
 import { objectKey } from "../storage";
+import { DEMO_ALEX_BANK, demoSnowRemovalBill } from "./bank-script";
 
 /** Deterministic, valid v4-shaped UUID from a label (stable demo URLs). */
 export function did(label: string): string {
@@ -710,7 +711,9 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
     add("organization_members", { id: did("mem:holdings:alex"), organizationId: orgId, userId: alex, role: "organization_admin", ...base(-400) });
 
     const connId = did("bankconn:alex");
-    add("bank_connections", { id: connId, userId: alex, transactionId: null, provider: "mock_banking", institutionId: "mock_chase", institutionName: "First Coastal Bank (Demo)", externalConnectionId: "item_demo_alex", status: "connected", consentCreatedAt: day(-120), consentExpiresAt: day(245), lastSyncedAt: day(-1, 23), lastError: null, ...base(-120) });
+    add("bank_connections", { id: connId, userId: alex, transactionId: null, provider: "mock_banking", institutionId: "mock_chase", institutionName: "First Coastal Bank (Demo)", externalConnectionId: DEMO_ALEX_BANK.externalConnectionId, status: "connected", consentCreatedAt: day(-DEMO_ALEX_BANK.connectedDaysAgo), consentExpiresAt: day(245), lastSyncedAt: day(-1, 23), lastError: null, ...base(-DEMO_ALEX_BANK.connectedDaysAgo) });
+    // The sandbox bank's statement for this connection is scripted in ./bank-script.ts.
+    add("bank_connection_secrets", { id: did("bankconnsecret:alex"), connectionId: connId, encryptedAccessToken: encryptField(DEMO_ALEX_BANK.accessToken, keyRing, `bank_connection:${connId}`), keyVersion: 1, createdAt: day(-DEMO_ALEX_BANK.connectedDaysAgo) });
     const acct = (key: string, name: string, mask: string, available: number) =>
       add("bank_accounts", { id: did(`acct:alex:${key}`), connectionId: connId, userId: alex, externalAccountId: `item_demo_alex_${key}`, name, mask, currency: "USD", availableBalance: available, currentBalance: available, balanceAsOf: day(-1, 23), ownerNames: ["Alex Morgan"], ownershipVerified: true, ownershipVerifiedAt: day(-120), ...base(-120) });
     const operating = acct("operating", "Holdings Operating", "8291", 4_820_000);
@@ -816,7 +819,7 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
     const aspenIns = ob("aspen", "insurance", { kind: "insurance", label: "Homeowners insurance", amountType: "event", frequency: "annual", nextDueOn: date(24), ...direct, vendor: ["Summit Peak Insurance (Demo)", "insurer"] });
     ob("aspen", "electricity", { kind: "electricity", label: "Electricity", amountType: "variable", expectedMin: 21_000, expectedMax: 29_000, expectedAmount: 25_000, frequency: "monthly", nextDueOn: date(13), vendor: ["Roaring Fork Power (Demo)", "utility"] });
     ob("aspen", "gas", { kind: "gas", label: "Gas", amountType: "variable", expectedMin: 18_000, expectedMax: 34_000, expectedAmount: 26_000, frequency: "monthly", nextDueOn: date(15), vendor: ["Mountain Gas (Demo)", "utility"] });
-    ob("aspen", "snow", { kind: "maintenance", label: "Snow removal", priority: "important", amountType: "fixed", expectedAmount: 45_000, frequency: "monthly", nextDueOn: date(8), payMethod: "bank_bill_pay", vendor: ["High Country Services (Demo)", "maintenance"] });
+    const aspenSnow = ob("aspen", "snow", { kind: "maintenance", label: "Snow removal", priority: "important", amountType: "fixed", expectedAmount: 45_000, frequency: "monthly", nextDueOn: date(8), payMethod: "bank_bill_pay", vendor: ["High Country Services (Demo)", "maintenance"] });
 
     // Bills. History is "paid (verified)" from the fictional bank statement.
     const bills: Bill[] = [];
@@ -861,6 +864,9 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
     for (const m of [miamiMortgage, nycMortgage, a1Mortgage]) for (const k of [1, 2]) paidRow(m, k, m.expectedAmount!);
     for (const k of [1, 2, 3]) paidRow(nycHoa, k, 185_000);
     billRow(nycTax, "current", 965_000, nycTax.nextDueOn!, { status: "covered_by_escrow", periodLabel: "Quarterly installment" });
+    // Last month's snow removal: Alex reported it paid; the bank statement can confirm it.
+    const snow = demoSnowRemovalBill(date(0));
+    billRow(aspenSnow, "last", 45_000, snow.dueOn, { status: "paid_reported", paidOn: snow.paidOn, updatedAt: `${snow.paidOn}T20:00:00.000Z` });
     // The Aspen renewal notice, with a fictional PDF.
     const renewalKey = `autopilot/${orgId}/renewal-notice-aspen.pdf`;
     files.push({ key: renewalKey, bytes: demoPdf("Homeowners policy renewal notice (DEMO)", ["Summit Peak Insurance (Demo) — fictional insurer", "Insured: Morgan Family Holdings LLC (Demo)", "Property: 37 Silver Pine Way, Aspen, CO (fictional)", "Renewal premium: $14,200.00"]), mimeType: "application/pdf" });

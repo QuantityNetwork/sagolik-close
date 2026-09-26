@@ -76,6 +76,23 @@ export async function markBillPaidAction(_p: ActionState, fd: FormData): Promise
   });
 }
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** Read-only: compares the linked accounts' posted transactions and the lender's figures with this property's bills and costs. */
+export async function checkBankActivityAction(_p: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(async () => {
+    const { ctx } = await requireContext();
+    const r = await core.syncBankActivity(ctx, formString(fd, "passportId") ?? "");
+    const found = [
+      r.verified ? `${plural(r.verified, "payment", "payments")} confirmed` : null,
+      r.suggested ? `${plural(r.suggested, "recurring cost", "recurring costs")} to confirm (Costs tab)` : null,
+      r.lenderUpdates ? "mortgage updated from the lender" : null,
+    ].filter(Boolean);
+    const summary = found.length ? `Checked: ${found.join(", ")}.` : r.accountsRead ? "Checked: nothing new." : "Nothing was checked.";
+    return { message: [summary, ...r.notes].join(" "), revalidate: ["/app/autopilot"] };
+  });
+}
+
 export async function reviewBillAction(_p: ActionState, fd: FormData): Promise<ActionState> {
   return runAction(async () => {
     const { ctx } = await requireContext();

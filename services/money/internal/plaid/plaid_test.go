@@ -63,6 +63,17 @@ func TestHostedLinkFlow(t *testing.T) {
 	if err != nil || *bals[0].Available != 25000000 || bals[0].Currency != "USD" {
 		t.Fatalf("balances: %v %+v", err, bals)
 	}
+	for i := range 501 {
+		f.Transactions = append(f.Transactions, map[string]any{"transaction_id": fmt.Sprint("t", i), "account_id": "acc_checking", "date": "2027-03-05", "name": "COFFEE", "amount": 4.5, "pending": i == 0})
+	}
+	txns, err := c.Transactions(ctx, at, "2027-01-01", "2027-03-31")
+	if err != nil || len(txns) != 500 || txns[0].ID != "t1" || txns[0].Amount != -450 {
+		t.Fatalf("transactions (both pages, pending skipped, money out negative): %v %d", err, len(txns))
+	}
+	ms, err := c.Mortgages(ctx, at)
+	if err != nil || len(ms) != 1 || *ms[0].NextMonthlyPayment != 298000 || *ms[0].EscrowBalance != 421050 || *ms[0].PropertyStreet != "2210 Cedar Hollow Rd" {
+		t.Fatalf("mortgages: %v %+v", err, ms)
+	}
 	if err := c.RemoveItem(ctx, at); err != nil || !f.ItemRemoved(itemID) {
 		t.Fatalf("remove: %v", err)
 	}

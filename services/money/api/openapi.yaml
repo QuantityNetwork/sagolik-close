@@ -228,6 +228,60 @@ paths:
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { description: Disconnected or reconnect required, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
         "429": { description: Checked too often, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/bank-connections/{cid}/transactions:
+    get:
+      summary: Posted transactions on the connection's cash accounts (owner only; needs MONEY_PLAID_OPTIONAL_PRODUCTS to include transactions)
+      description: Read for Property Autopilot's payment verification and recurring-cost detection. Nothing is stored; each read is audited.
+      parameters:
+        - { name: cid, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 180, default: 120 } }
+      responses:
+        "200":
+          description: Transactions, newest first as Plaid returns them. Pending ones are left out.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  transactions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        accountId: { type: string, format: uuid }
+                        date: { type: string, format: date }
+                        description: { type: string }
+                        amount: { type: integer, description: "Cents; negative = money out" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Disconnected or reconnect required, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "503": { description: Product not enabled for this deployment, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+  /v1/bank-connections/{cid}/mortgages:
+    get:
+      summary: The lender's mortgage figures (owner only; needs MONEY_PLAID_OPTIONAL_PRODUCTS to include liabilities)
+      parameters:
+        - { name: cid, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Mortgages (empty when the bank reports none)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mortgages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        lenderName: { type: [string, "null"] }
+                        nextPaymentDueOn: { type: [string, "null"], format: date }
+                        nextMonthlyPayment: { type: [integer, "null"], description: Cents }
+                        escrowBalance: { type: [integer, "null"], description: Cents }
+                        propertyStreet: { type: [string, "null"] }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { description: Disconnected or reconnect required, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "503": { description: Product not enabled for this deployment, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
   /v1/bank-connections/{cid}/disconnect:
     post:
       summary: Revoke at Plaid and destroy the access token (owner only; step-up)

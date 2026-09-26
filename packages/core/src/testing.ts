@@ -9,6 +9,7 @@ import { createProviders, MOCK_SIGNATURE_HEADER, setMockWebhookSink } from "@sag
 import { parseKeyRing } from "@sagolik/security";
 import type { Logger, ServiceContext } from "./context";
 import { professionalMemberships } from "./memberships";
+import { restoreSandboxBanking } from "./demo/sandbox-bank";
 import { buildDemoData, DEMO_PERSONAS, loadDemoData } from "./demo/seed";
 import { registerReactions } from "./services/reactions";
 import { handleWebhook } from "./services/webhooks";
@@ -36,6 +37,7 @@ export async function createTestHarness(opts: { seed?: boolean; flags?: ServiceC
   if (opts.seed !== false) {
     await loadDemoData(db, demo);
     for (const f of demo.files) await storage.put(f.key, f.bytes, f.mimeType).catch(() => undefined);
+    if (providers.mocks.banking) await restoreSandboxBanking(db, providers.mocks.banking, keyRing);
   } else {
     // People and organizations only.
     await loadDemoData(db, { rows: { profiles: demo.rows.profiles, organizations: demo.rows.organizations, organization_members: demo.rows.organization_members, organization_settings: demo.rows.organization_settings }, files: [] });

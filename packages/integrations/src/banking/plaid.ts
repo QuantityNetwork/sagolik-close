@@ -30,6 +30,7 @@ import {
   type ProviderAccount,
   type ProviderBalance,
   type ProviderBankTransaction,
+  type ProviderMortgage,
   namesMatch,
 } from "./provider";
 
@@ -46,6 +47,8 @@ const USER_MESSAGES: Record<string, { message: string; action?: "reconnect_bank"
   INSTITUTION_NOT_RESPONDING: { message: "Your bank isn't responding right now. Please try again in a little while.", action: "retry" },
   RATE_LIMIT_EXCEEDED: { message: "We're refreshing too often. Please try again in a minute.", action: "retry" },
   PRODUCTS_NOT_SUPPORTED: { message: "This bank doesn't support the information we need. Try another account." },
+  PRODUCT_NOT_READY: { message: "Your bank is still preparing its transaction history. Please try again in a few minutes.", action: "retry" },
+  NO_LIABILITY_ACCOUNTS: { message: "Your bank didn't report a mortgage on this connection." },
 };
 
 function toCurrency(code: string | null | undefined): Currency {
@@ -68,11 +71,20 @@ export class PlaidBankingProvider implements BankingProvider {
   readonly supportedCountries = ["US", "CA", "GB", "IE", "FR", "ES", "NL", "DE"] as const;
   readonly supportsPaymentInitiation = false;
   readonly providerChoosesInstitution = true;
+  readonly activityData: { transactions: boolean; mortgages: boolean };
   private readonly host: string;
   private readonly webhooks: PlaidWebhookVerifier;
 
   constructor(
-    private readonly cfg: { clientId: string; secret: string; env: keyof typeof HOSTS; webhookUrl?: string; baseUrl?: string },
+    private readonly cfg: {
+      clientId: string;
+      secret: string;
+      env: keyof typeof HOSTS;
+      webhookUrl?: string;
+      baseUrl?: string;
+      /** Opt-in Plaid products for Property Autopilot. Requested as optional: not billed until used. */
+      optionalProducts?: ReadonlyArray<"transactions" | "liabilities">;
+    },
     private readonly fetchImpl: typeof fetch = fetch,
   ) {
     this.host = cfg.baseUrl ?? HOSTS[cfg.env];
@@ -85,6 +97,7 @@ export class PlaidBankingProvider implements BankingProvider {
         return null;
       }
     });
+    this.activityData = { transactions: !!cfg.optionalProducts?.includes("transactions"), mortgages: !!cfg.optionalProducts?.includes("liabilities") };
     this.info = { id: "plaid", displayName: "Plaid", mode: cfg.env === "production" ? "production" : "sandbox" };
   }
 
@@ -137,6 +150,8 @@ export class PlaidBankingProvider implements BankingProvider {
       user: { client_user_id: opts.userId, legal_name: opts.fullName },
       client_name: "Sagolik Close",
       products: ["identity"],
+      ...(this.cfg.optionalProducts?.length ? { optional_products: [...this.cfg.optionalProducts] } : {}),
+      ...(this.cfg.optionalProducts?.includes("transactions") ? { transactions: { days_requested: 180 } } : {}),
       country_codes: [opts.country.toUpperCase()],
       language: "en",
       webhook: this.cfg.webhookUrl,
@@ -199,17 +214,39 @@ export class PlaidBankingProvider implements BankingProvider {
   }
 
   async getTransactions(accessToken: string, range: { from: string; to: string }): Promise<ProviderBankTransaction[]> {
-    const r = await this.call<{
-      transactions: Array<{ transaction_id: string; account_id: string; date: string; name: string; amount: number; iso_currency_code: string | null }>;
-    }>("/transactions/get", { access_token: accessToken, start_date: range.from, end_date: range.to, options: { count: 250 } });
-    // Plaid: positive amount = money leaving the account. We use negative for outflows.
-    return r.transactions.map((t) => ({
-      id: t.transaction_id,
-      externalAccountId: t.account_id,
-      date: t.date,
-      description: t.name,
-      amount: -Math.round(t.amount * 100),
-      currency: toCurrency(t.iso_currency_code),
+    type Page = { total_transactions: number; transactions: Array<{ transaction_id: string; account_id: string; date: string; name: string; merchant_name?: string | null; amount: number; iso_currency_code: string | null; pending: boolean }> };
+    const out: ProviderBankTransaction[] = [];
+    // Up to 1,000 transactions, 500 per page; posted transactions only (pending ones can still change).
+    for (let offset = 0; offset < 1000; ) {
+      const r = await this.call<Page>("/transactions/get", { access_token: accessToken, start_date: range.from, end_date: range.to, options: { count: 500, offset } });
+      for (const t of r.transactions) {
+        if (t.pending) continue;
+        // Plaid: positive amount = money leaving the account. We use negative for outflows.
+        out.push({ id: t.transaction_id, externalAccountId: t.account_id, date: t.date, description: t.merchant_name ? `${t.merchant_name} ${t.name}` : t.name, amount: -Math.round(t.amount * 100), currency: toCurrency(t.iso_currency_code) });
+      }
+      offset += r.transactions.length;
+      if (!r.transactions.length || offset >= r.total_transactions) break;
+    }
+    return out;
+  }
+
+  async getMortgages(accessToken: string): Promise<ProviderMortgage[]> {
+    let r: { liabilities: { mortgage?: Array<{ account_id: string; next_payment_due_date: string | null; next_monthly_payment: number | null; escrow_balance: number | null; property_address: { street: string | null } | null }> | null } };
+    try {
+      r = await this.call("/liabilities/get", { access_token: accessToken });
+    } catch (e) {
+      if (e instanceof ProviderError && (e.code === "NO_LIABILITY_ACCOUNTS" || e.code === "PRODUCTS_NOT_SUPPORTED")) return [];
+      throw e;
+    }
+    const item = await this.call<{ item: { institution_name?: string | null } }>("/item/get", { access_token: accessToken }).catch(() => null);
+    const lender = item?.item.institution_name ?? "Your lender";
+    return (r.liabilities.mortgage ?? []).map((m) => ({
+      externalAccountId: m.account_id,
+      lenderName: lender,
+      nextPaymentDueOn: m.next_payment_due_date,
+      nextMonthlyPayment: minor(m.next_monthly_payment),
+      escrowBalance: minor(m.escrow_balance),
+      propertyStreet: m.property_address?.street ?? null,
     }));
   }
 

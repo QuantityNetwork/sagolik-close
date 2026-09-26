@@ -245,6 +245,11 @@ func (s *Store) CreateConnection(ctx context.Context, env Sealer, n NewConnectio
 	return s.GetConnection(ctx, id)
 }
 
+// AccountIDs maps Plaid account ids to ours for a connection (cash accounts only).
+func (s *Store) AccountIDs(ctx context.Context, connectionID string) (map[string]string, error) {
+	return s.accountLookup(ctx, connectionID)
+}
+
 // accountLookup maps Plaid account ids to ours for a connection.
 func (s *Store) accountLookup(ctx context.Context, connectionID string) (map[string]string, error) {
 	rows, err := s.pool.Query(ctx, `select plaid_account_id, id from bank_accounts where connection_id = $1`, connectionID)

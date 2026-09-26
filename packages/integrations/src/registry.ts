@@ -62,6 +62,7 @@ export function createProviders(env: Env): Providers {
       secret: env.PLAID_SECRET,
       env: env.PLAID_ENV,
       webhookUrl: `${env.APP_URL}/api/webhooks/plaid`,
+      optionalProducts: env.PLAID_OPTIONAL_PRODUCTS,
     });
   } else {
     banking = mocks.banking = new MockBankingProvider(secret, env.APP_URL);

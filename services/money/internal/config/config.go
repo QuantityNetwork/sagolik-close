@@ -46,7 +46,9 @@ type Config struct {
 	PlaidSecretFile  string
 	PlaidRedirectURI string // the web app's callback for Hosted Link
 	PlaidWebhookURL  string // public URL that reaches WebhookAddr (optional)
-	WebhookAddr      string // listener for provider webhooks (no mTLS; signature-checked)
+	// PlaidOptionalProducts: opt-in "transactions" and/or "liabilities" for Property Autopilot.
+	PlaidOptionalProducts []string
+	WebhookAddr           string // listener for provider webhooks (no mTLS; signature-checked)
 }
 
 // Load parses configuration using getenv (os.Getenv in production).
@@ -81,6 +83,11 @@ func Load(getenv func(string) string) (Config, error) {
 		PlaidRedirectURI:           get("MONEY_PLAID_REDIRECT_URI", ""),
 		PlaidWebhookURL:            get("MONEY_PLAID_WEBHOOK_URL", ""),
 		WebhookAddr:                get("MONEY_WEBHOOK_ADDR", ""),
+	}
+	for _, p := range strings.Split(get("MONEY_PLAID_OPTIONAL_PRODUCTS", ""), ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			c.PlaidOptionalProducts = append(c.PlaidOptionalProducts, p)
+		}
 	}
 	hours, err := strconv.Atoi(get("MONEY_COOLING_OFF_HOURS", "24"))
 	if err != nil || hours < 1 || hours > 168 {
@@ -173,6 +180,11 @@ func (c Config) validatePlaid(bad func(string, ...any)) {
 		u, err := url.Parse(v)
 		if err != nil || u.Host == "" || (u.Scheme != "https" && !(c.Env == "local" && u.Scheme == "http")) {
 			bad("%s must be an https URL", name)
+		}
+	}
+	for _, p := range c.PlaidOptionalProducts {
+		if p != "transactions" && p != "liabilities" {
+			bad("MONEY_PLAID_OPTIONAL_PRODUCTS may only list transactions and liabilities")
 		}
 	}
 	checkURL("MONEY_PLAID_REDIRECT_URI", c.PlaidRedirectURI, true)

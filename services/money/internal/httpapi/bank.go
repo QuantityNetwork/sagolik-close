@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +28,8 @@ type PlaidAPI interface {
 	Identity(ctx context.Context, accessToken redact.Secret) ([]plaid.Account, error)
 	Balances(ctx context.Context, accessToken redact.Secret, accountIDs ...string) ([]plaid.Account, error)
 	RemoveItem(ctx context.Context, accessToken redact.Secret) error
+	Transactions(ctx context.Context, accessToken redact.Secret, from, to string) ([]plaid.Transaction, error)
+	Mortgages(ctx context.Context, accessToken redact.Secret) ([]plaid.Mortgage, error)
 }
 
 // BankConfig wires Plaid into the API. A nil Plaid disables bank endpoints.
@@ -35,7 +38,9 @@ type BankConfig struct {
 	Environment string // "sandbox" | "production": webhooks from another environment are ignored
 	RedirectURI string // the web app's callback; the link id is added as ?link=
 	WebhookURL  string // optional public URL of /webhooks/plaid
-	Webhooks    *plaid.WebhookVerifier
+	// OptionalProducts requested at link time (opt-in; Plaid bills them once used).
+	OptionalProducts []string
+	Webhooks         *plaid.WebhookVerifier
 }
 
 // Proof-of-funds checks call Plaid's billed real-time balance endpoint.
@@ -109,7 +114,7 @@ func (s *Server) startBankLink(w http.ResponseWriter, r *http.Request) {
 	q := redirect.Query()
 	q.Set("link", linkID)
 	redirect.RawQuery = q.Encode()
-	req := plaid.LinkRequest{ClientUserID: p.UserID, RedirectURI: redirect.String(), WebhookURL: s.Bank.WebhookURL}
+	req := plaid.LinkRequest{ClientUserID: p.UserID, RedirectURI: redirect.String(), WebhookURL: s.Bank.WebhookURL, OptionalProducts: s.Bank.OptionalProducts}
 	if validLegalName(b.LegalName) {
 		req.LegalName = strings.TrimSpace(b.LegalName)
 	}
@@ -429,6 +434,95 @@ func (s *Server) disconnectBank(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"connection": out})
+}
+
+func (s *Server) productEnabled(w http.ResponseWriter, r *http.Request, product string) bool {
+	for _, p := range s.Bank.OptionalProducts {
+		if p == product {
+			return true
+		}
+	}
+	writeError(w, r, http.StatusServiceUnavailable, "unavailable", "This bank data isn't switched on for this deployment.")
+	return false
+}
+
+// bankTransactions returns the owner's posted cash-account transactions for
+// Property Autopilot to verify payments. Nothing is stored here; each read is audited.
+func (s *Server) bankTransactions(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r)
+	if !s.bankEnabled(w, r) || !s.productEnabled(w, r, "transactions") {
+		return
+	}
+	conn, ok := s.ownConnection(w, r, p)
+	if !ok {
+		return
+	}
+	days := 120
+	if d, err := strconv.Atoi(r.URL.Query().Get("days")); err == nil && d >= 1 && d <= 180 {
+		days = d
+	}
+	at, err := s.Store.AccessToken(r.Context(), s.Sealer, conn.ID)
+	if err != nil {
+		s.bankStoreError(w, r, err)
+		return
+	}
+	ids, err := s.Store.AccountIDs(r.Context(), conn.ID)
+	if err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	now := s.now().UTC()
+	txns, err := s.Bank.Plaid.Transactions(r.Context(), at, now.AddDate(0, 0, -days).Format("2006-01-02"), now.Format("2006-01-02"))
+	if err != nil {
+		s.markReconnect(r, conn.ID, err)
+		s.plaidError(w, r, err)
+		return
+	}
+	out := make([]map[string]any, 0, len(txns))
+	for _, t := range txns {
+		accountID, known := ids[t.AccountID]
+		if !known {
+			continue // only the cash accounts recorded for this connection
+		}
+		out = append(out, map[string]any{"id": t.ID, "accountId": accountID, "date": t.Date, "description": t.Description, "amount": t.Amount})
+	}
+	if _, err := s.Store.AppendAudit(r.Context(), store.AuditEvent{Actor: "user:" + p.UserID, Action: "bank.transactions_read", Subject: "bank_connection:" + conn.ID, RequestID: requestID(r), Details: map[string]any{"days": days, "count": len(out)}}); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"transactions": out})
+}
+
+// bankMortgages returns the lender's mortgage figures (next payment, escrow balance).
+func (s *Server) bankMortgages(w http.ResponseWriter, r *http.Request) {
+	p := principalFrom(r)
+	if !s.bankEnabled(w, r) || !s.productEnabled(w, r, "liabilities") {
+		return
+	}
+	conn, ok := s.ownConnection(w, r, p)
+	if !ok {
+		return
+	}
+	at, err := s.Store.AccessToken(r.Context(), s.Sealer, conn.ID)
+	if err != nil {
+		s.bankStoreError(w, r, err)
+		return
+	}
+	ms, err := s.Bank.Plaid.Mortgages(r.Context(), at)
+	if err != nil {
+		s.markReconnect(r, conn.ID, err)
+		s.plaidError(w, r, err)
+		return
+	}
+	out := make([]map[string]any, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, map[string]any{"lenderName": conn.InstitutionName, "nextPaymentDueOn": m.NextPaymentDueOn, "nextMonthlyPayment": m.NextMonthlyPayment, "escrowBalance": m.EscrowBalance, "propertyStreet": m.PropertyStreet})
+	}
+	if _, err := s.Store.AppendAudit(r.Context(), store.AuditEvent{Actor: "user:" + p.UserID, Action: "bank.mortgages_read", Subject: "bank_connection:" + conn.ID, RequestID: requestID(r), Details: map[string]any{"count": len(out)}}); err != nil {
+		s.fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"mortgages": out})
 }
 
 // ---------------------------------------------------------------- webhooks

@@ -31,7 +31,7 @@ import { fundsStillNeeded } from "./views";
 const MONEY_LINK = "link:";
 const MONEY_CONN = "money:";
 
-function moneyConnectionId(conn: BankConnection): string | null {
+export function moneyConnectionId(conn: BankConnection): string | null {
   return conn.externalConnectionId?.startsWith(MONEY_CONN) ? conn.externalConnectionId.slice(MONEY_CONN.length) : null;
 }
 
@@ -187,7 +187,7 @@ async function syncAccounts(ctx: ServiceContext, conn: BankConnection, accessTok
   await ctx.writer.bank_connections.update(conn.id, { lastSyncedAt: now });
 }
 
-async function accessTokenFor(ctx: ServiceContext, connectionId: string): Promise<string> {
+export async function accessTokenFor(ctx: ServiceContext, connectionId: string): Promise<string> {
   const secret = await ctx.writer.bank_connection_secrets.findOne({ connectionId });
   if (!secret) throw new AppError("provider_error", "Your bank needs you to reconnect before we can refresh the account.", 409);
   return decryptField(secret.encryptedAccessToken, ctx.keyRing, `bank_connection:${connectionId}`);

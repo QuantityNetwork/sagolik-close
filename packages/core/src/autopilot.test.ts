@@ -15,6 +15,7 @@ import {
   updateFunding,
   updateObligation,
 } from "./services/autopilot";
+import { runBankActivityChecks, syncBankActivity } from "./services/bank-activity";
 import { requireUser } from "./context";
 import { createTransaction } from "./services/transactions";
 import { createTestHarness } from "./testing";
@@ -130,6 +131,54 @@ describe("Property Autopilot — demo portfolio", () => {
     const ins = v.policies.find((p) => p.obligationKind === "insurance")!;
     await savePolicy(alex, DEMO_PORTFOLIO_ORG_ID, ins.id, { ...ins, maxAmount: 2_000_000 });
     expect((await passportView(alex, DEMO_PASSPORTS.aspen)).assessment.status).toBe("protected");
+  });
+});
+
+describe("Property Autopilot — bank activity (read-only)", () => {
+  it("confirms a reported payment from the bank statement, only with the exact amount and payee", async () => {
+    const h = await createTestHarness();
+    const alex = await h.as("alex.morgan");
+    const before = (await passportView(alex, DEMO_PASSPORTS.aspen)).bills.find((b) => b.status === "paid_reported")!;
+    const r = await syncBankActivity(alex, DEMO_PASSPORTS.aspen);
+    expect(r).toMatchObject({ verified: 1, suggested: 0, notes: [] });
+    const after = await h.db.bills.get(before.id);
+    expect(after).toMatchObject({ status: "paid_verified", paymentReference: expect.stringContaining("HIGH COUNTRY SERVICES BILLPAY") });
+    expect(after!.paymentReference).toContain("Holdings Operating •••• 8291");
+    // The renewal ($14,200) has no matching payment, so it stays open.
+    expect((await passportView(alex, DEMO_PASSPORTS.aspen)).bills.filter((b) => b.status === "received")).toHaveLength(1);
+    // Running again changes nothing.
+    expect(await syncBankActivity(alex, DEMO_PASSPORTS.aspen)).toMatchObject({ verified: 0, suggested: 0 });
+  });
+
+  it("suggests the monthly lawn service on Austin #1's own account, once, without activating it", async () => {
+    const h = await createTestHarness();
+    const alex = await h.as("alex.morgan");
+    expect(await syncBankActivity(alex, DEMO_PASSPORTS.austin1)).toMatchObject({ suggested: 1 });
+    const lawn = (await h.db.obligations.find({ passportId: DEMO_PASSPORTS.austin1, source: "bank_history" }))[0]!;
+    expect(lawn).toMatchObject({ label: "Greenleaf Lawn Care", kind: "maintenance", status: "suggested", amountType: "variable", expectedMin: 9_500, expectedMax: 11_000, payeeMatch: "greenleaf lawn care" });
+    // Ending the suggestion keeps it from coming back.
+    await updateObligation(alex, lawn.id, { status: "ended" });
+    expect(await syncBankActivity(alex, DEMO_PASSPORTS.austin1)).toMatchObject({ suggested: 0 });
+    // Shared accounts (the operating account pays three properties) never produce suggestions.
+    expect(await syncBankActivity(alex, DEMO_PASSPORTS.miami)).toMatchObject({ suggested: 0 });
+  });
+
+  it("applies the lender's figures to the matching mortgage only", async () => {
+    const h = await createTestHarness();
+    const alex = await h.as("alex.morgan");
+    expect(await syncBankActivity(alex, DEMO_PASSPORTS.austin2)).toMatchObject({ lenderUpdates: 1 });
+    const mortgage = (await h.db.obligations.find({ passportId: DEMO_PASSPORTS.austin2, kind: "mortgage" }))[0]!;
+    expect(mortgage.expectedAmount).toBe(301_400);
+    // Miami's servicer figures already match: nothing to change.
+    expect(await syncBankActivity(alex, DEMO_PASSPORTS.miami)).toMatchObject({ lenderUpdates: 0 });
+  });
+
+  it("is for the portfolio's members only, and the worker pass is idempotent", async () => {
+    const h = await createTestHarness();
+    for (const who of ["olivia.carter", "admin"]) expect(await code(syncBankActivity(await h.as(who), DEMO_PASSPORTS.aspen))).toBe("not_found");
+    const first = await runBankActivityChecks(h.system());
+    expect(first).toBeGreaterThanOrEqual(3); // snow removal verified, lawn care suggested, Austin #2 mortgage updated
+    expect(await runBankActivityChecks(h.system())).toBe(0);
   });
 });
 

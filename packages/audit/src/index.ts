@@ -81,6 +81,10 @@ export const AUDIT_ACTIONS = [
   "autopilot.funding_updated",
   "autopilot.policy_updated",
   "autopilot.monitoring_changed",
+  "autopilot.bank_checked",
+  "autopilot.bill_paid_verified",
+  "autopilot.obligation_suggested",
+  "autopilot.lender_data_applied",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
