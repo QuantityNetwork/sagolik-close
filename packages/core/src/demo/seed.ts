@@ -11,7 +11,8 @@
 import { createHash } from "node:crypto";
 import type { Db } from "@sagolik/database";
 import { encryptField, type KeyRing, sha256Hex } from "@sagolik/security";
-import type { Row, TableName } from "@sagolik/types";
+import type { Bill, Obligation, Row, TableName } from "@sagolik/types";
+import { addMonths, assessPortfolio, defaultReviewPolicies, type PassportInput } from "@sagolik/workflow";
 import { objectKey } from "../storage";
 
 /** Deterministic, valid v4-shaped UUID from a label (stable demo URLs). */
@@ -60,6 +61,8 @@ export const DEMO_PERSONAS: DemoPersona[] = [
   persona("rachel.kim", "Rachel Kim", "M&A advisor", "Advisor at Kim Business Advisors (demo), running the sale.", "/app/command-center"),
   persona("david.chen", "David Chen", "Deal counsel", "Buyer's counsel at Chen Legal (demo); confirms the ownership transfer.", "/app/command-center"),
   persona("grace.liu", "Grace Liu", "Accountant", "Quality-of-earnings accountant at Liu & Partners CPAs (demo).", "/app/command-center"),
+  // Property Autopilot — a fictional owner with five fictional properties.
+  persona("alex.morgan", "Alex Morgan", "Property owner", "Owns five properties through Morgan Family Holdings (fictional). See Property Autopilot.", "/app/autopilot"),
   persona("admin", "Sagolik Operations (demo)", "Platform admin", "Internal Sagolik admin console. No implicit access to transaction data.", "/admin"),
 ];
 
@@ -69,6 +72,19 @@ export const BUSINESS_PERSONA_KEYS: readonly string[] = ["amara.okafor", "tom.be
 const P = Object.fromEntries(DEMO_PERSONAS.map((p) => [p.key, p])) as Record<string, DemoPersona>;
 
 export const DEMO_TRANSACTION_ID = did("tx:maple");
+/** Personas for Property Autopilot (after closing). */
+export const AUTOPILOT_PERSONA_KEYS: readonly string[] = ["alex.morgan"];
+
+/** Alex Morgan's fictional portfolio (Property Autopilot demo). */
+export const DEMO_PORTFOLIO_ORG_ID = did("org:morgan-holdings");
+export const DEMO_PASSPORTS = {
+  miami: did("passport:miami"),
+  manhattan: did("passport:manhattan"),
+  austin1: did("passport:austin1"),
+  austin2: did("passport:austin2"),
+  aspen: did("passport:aspen"),
+} as const;
+
 /** The fictional business acquisition (beta). */
 export const DEMO_BUSINESS_TRANSACTION_ID = did("tx:blueharbor");
 
@@ -685,6 +701,195 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
   event(H, "recording_pending", "ownership_transfer", -20, "Automatic: every requirement for \"ownership_transfer\" is met.", null);
   event(H, "ownership_transfer", "closed", -19, "Disbursement confirmed; file closed.", u("marcus.lee"));
 
+  // ------------------------------------------------------------------ 6. Property Autopilot — Alex Morgan's portfolio (fictional)
+  // Monitoring only: Sagolik never pays these bills. Every number here is invented.
+  {
+    const alex = u("alex.morgan");
+    const orgId = DEMO_PORTFOLIO_ORG_ID;
+    add("organizations", { id: orgId, name: "Morgan Family Holdings LLC (Demo)", slug: "morgan-family-holdings-demo", type: "holding_entity", jurisdiction: "US", ...base(-400) });
+    add("organization_members", { id: did("mem:holdings:alex"), organizationId: orgId, userId: alex, role: "organization_admin", ...base(-400) });
+
+    const connId = did("bankconn:alex");
+    add("bank_connections", { id: connId, userId: alex, transactionId: null, provider: "mock_banking", institutionId: "mock_chase", institutionName: "First Coastal Bank (Demo)", externalConnectionId: "item_demo_alex", status: "connected", consentCreatedAt: day(-120), consentExpiresAt: day(245), lastSyncedAt: day(-1, 23), lastError: null, ...base(-120) });
+    const acct = (key: string, name: string, mask: string, available: number) =>
+      add("bank_accounts", { id: did(`acct:alex:${key}`), connectionId: connId, userId: alex, externalAccountId: `item_demo_alex_${key}`, name, mask, currency: "USD", availableBalance: available, currentBalance: available, balanceAsOf: day(-1, 23), ownerNames: ["Alex Morgan"], ownershipVerified: true, ownershipVerifiedAt: day(-120), ...base(-120) });
+    const operating = acct("operating", "Holdings Operating", "8291", 4_820_000);
+    const austinOps = acct("austin", "Austin Rentals Operating", "4410", 980_000);
+    const austin2Ops = acct("austin2", "Austin #2 Operating", "5520", 210_000);
+    const reserve = acct("reserve", "Property Reserve", "7002", 10_000_000);
+
+    const policies = defaultReviewPolicies().map((p) => add("review_policies", { id: did(`policy:holdings:${p.position}`), organizationId: orgId, passportId: null, ...p, enabled: true, ...base(-400) }));
+
+    const vendorIds = new Map<string, string>();
+    const vendor = (name: string, category: Row<"vendors">["category"]) => {
+      if (!vendorIds.has(name)) vendorIds.set(name, add("vendors", { id: did(`vendor:holdings:${name}`), organizationId: orgId, name, category, phone: null, website: null, ...base(-400) }).id);
+      return vendorIds.get(name)!;
+    };
+
+    type Spec = { key: keyof typeof DEMO_PASSPORTS; label: string; address: string; city: string; region: string; postal: string; type: string; acquired: number; tax: number; hoa: number | null };
+    const specs: Spec[] = [
+      { key: "miami", label: "Miami Beach Residence", address: "412 Coral Shell Way", city: "Miami Beach", region: "FL", postal: "33139", type: "single_family", acquired: -900, tax: 1_840_000, hoa: null },
+      { key: "manhattan", label: "Manhattan Condo", address: "88 Harborview Place, Apt 12B", city: "New York", region: "NY", postal: "10014", type: "condo", acquired: -1400, tax: 3_860_000, hoa: 185_000 },
+      { key: "austin1", label: "Austin Rental #1", address: "1507 Bluebonnet Lane", city: "Austin", region: "TX", postal: "78745", type: "single_family", acquired: -700, tax: 710_000, hoa: 8_500 },
+      { key: "austin2", label: "Austin Rental #2", address: "2210 Cedar Hollow Road", city: "Austin", region: "TX", postal: "78748", type: "single_family", acquired: -300, tax: 760_000, hoa: null },
+      { key: "aspen", label: "Aspen Vacation Home", address: "37 Silver Pine Way", city: "Aspen", region: "CO", postal: "81611", type: "single_family", acquired: -2000, tax: 2_230_000, hoa: null },
+    ];
+    for (const sp of specs) {
+      const propertyId = did(`prop:autopilot:${sp.key}`);
+      add("properties", { id: propertyId, organizationId: orgId, addressLine1: sp.address, addressLine2: null, city: sp.city, region: sp.region, postalCode: sp.postal, country: "US", latitude: null, longitude: null, parcelId: null, propertyType: sp.type, yearBuilt: null, livingArea: null, areaUnit: "sqft", bedrooms: null, bathrooms: null, lotSize: null, imageUrls: [], propertyTaxAnnual: sp.tax, hoaMonthly: sp.hoa, energyRating: null, legalDescription: null, currency: "USD", ...base(sp.acquired) });
+      add("property_passports", { id: DEMO_PASSPORTS[sp.key], organizationId: orgId, propertyId, ownershipRecordId: null, origin: "imported", label: sp.label, status: "live", monitoring: "monitor", acquiredOn: date(sp.acquired), activatedAt: day(-90), ...base(-90) });
+    }
+    const fund = (key: keyof typeof DEMO_PASSPORTS, op: string, min: number, reserveId: string | null) =>
+      add("funding_rules", { id: did(`funding:${key}`), organizationId: orgId, passportId: DEMO_PASSPORTS[key], operatingAccountId: op, reserveAccountId: reserveId, minOperatingBalance: min, targetOperatingBalance: min * 4, ...base(-90) });
+    fund("miami", operating.id, 500_000, reserve.id);
+    fund("manhattan", operating.id, 500_000, reserve.id);
+    fund("aspen", operating.id, 500_000, reserve.id);
+    fund("austin1", austinOps.id, 100_000, reserve.id);
+    fund("austin2", austin2Ops.id, 50_000, reserve.id);
+
+    const obligations: Obligation[] = [];
+    type ObSpec = Partial<Obligation> & Pick<Obligation, "kind" | "label" | "amountType" | "frequency"> & { vendor?: [string, Row<"vendors">["category"]] };
+    const ob = (key: keyof typeof DEMO_PASSPORTS, slug: string, o: ObSpec): Obligation => {
+      const { vendor: v, ...rest } = o;
+      const row = add("obligations", {
+        id: did(`ob:${key}:${slug}`),
+        organizationId: orgId,
+        passportId: DEMO_PASSPORTS[key],
+        vendorId: v ? vendor(v[0], v[1]) : null,
+        priority: "critical",
+        expectedAmount: null,
+        expectedMin: null,
+        expectedMax: null,
+        currency: "USD",
+        nextDueOn: null,
+        graceDays: 0,
+        payMethod: "autopay",
+        escrowStatus: "not_applicable",
+        fundingAccountId: null,
+        referenceLast4: null,
+        payeeMatch: null,
+        source: "demo",
+        confidence: 100,
+        status: "active",
+        endedOn: null,
+        createdBy: alex,
+        ...base(-90),
+        ...rest,
+      });
+      obligations.push(row);
+      return row;
+    };
+    const escrowed = { payMethod: "escrow" as const, escrowStatus: "confirmed_escrowed" as const };
+    const direct = { payMethod: "manual" as const, escrowStatus: "confirmed_not_escrowed" as const };
+
+    // Miami Beach Residence — the electricity anomaly.
+    const miamiMortgage = ob("miami", "mortgage", { kind: "mortgage", label: "Mortgage", amountType: "fixed", expectedAmount: 825_000, frequency: "monthly", nextDueOn: date(14), graceDays: 15, vendor: ["Atlantic Home Loans (Demo)", "lender"] });
+    ob("miami", "tax", { kind: "property_tax", label: "Property tax", amountType: "periodic", expectedAmount: 1_840_000, frequency: "annual", nextDueOn: date(200), ...direct, vendor: ["County Tax Collector (Demo)", "tax_authority"] });
+    ob("miami", "insurance", { kind: "insurance", label: "Homeowners insurance", amountType: "periodic", expectedAmount: 1_260_000, frequency: "annual", nextDueOn: date(150), ...direct, vendor: ["Harborline Mutual (Demo)", "insurer"] });
+    const miamiPower = ob("miami", "electricity", { kind: "electricity", label: "Electricity", amountType: "variable", expectedMin: 22_000, expectedMax: 31_000, frequency: "monthly", nextDueOn: date(9), vendor: ["Coastal Power & Light (Demo)", "utility"] });
+    ob("miami", "water", { kind: "water", label: "Water", amountType: "variable", expectedMin: 11_000, expectedMax: 16_000, expectedAmount: 14_000, frequency: "monthly", nextDueOn: date(18), vendor: ["Bayshore Water (Demo)", "utility"] });
+    ob("miami", "internet", { kind: "internet", label: "Internet", priority: "important", amountType: "fixed", expectedAmount: 8_900, frequency: "monthly", nextDueOn: date(21), vendor: ["Bayline Fiber (Demo)", "telecom"] });
+    ob("miami", "security", { kind: "security", label: "Security monitoring", priority: "important", amountType: "fixed", expectedAmount: 6_500, frequency: "monthly", nextDueOn: date(5), vendor: ["Sentinel Home Security (Demo)", "security"] });
+
+    // Manhattan Condo — taxes and insurance paid through the lender's escrow.
+    const nycMortgage = ob("manhattan", "mortgage", { kind: "mortgage", label: "Mortgage (includes escrow)", amountType: "fixed", expectedAmount: 690_000, frequency: "monthly", nextDueOn: date(14), graceDays: 15, vendor: ["Empire Mutual Servicing (Demo)", "lender"] });
+    const nycTax = ob("manhattan", "tax", { kind: "property_tax", label: "Property tax", amountType: "periodic", expectedAmount: 965_000, frequency: "quarterly", nextDueOn: date(20), ...escrowed, vendor: ["City Department of Finance (Demo)", "tax_authority"] });
+    ob("manhattan", "insurance", { kind: "insurance", label: "Condo insurance (HO-6)", amountType: "periodic", expectedAmount: 180_000, frequency: "annual", nextDueOn: date(240), ...escrowed, vendor: ["Harborline Mutual (Demo)", "insurer"] });
+    const nycHoa = ob("manhattan", "hoa", { kind: "hoa", label: "Common charges", amountType: "fixed", expectedAmount: 185_000, frequency: "monthly", nextDueOn: date(6), vendor: ["Harborview Condominium Board (Demo)", "hoa"] });
+    ob("manhattan", "electricity", { kind: "electricity", label: "Electricity", amountType: "variable", expectedMin: 14_000, expectedMax: 19_000, expectedAmount: 16_000, frequency: "monthly", nextDueOn: date(16), vendor: ["Hudson Electric (Demo)", "utility"] });
+
+    // Austin Rental #1 — everything in order.
+    const a1Mortgage = ob("austin1", "mortgage", { kind: "mortgage", label: "Mortgage (includes escrow)", amountType: "fixed", expectedAmount: 265_000, frequency: "monthly", nextDueOn: date(14), graceDays: 15, vendor: ["Lone Star Home Lending (Demo)", "lender"] });
+    ob("austin1", "tax", { kind: "property_tax", label: "Property tax", amountType: "periodic", expectedAmount: 710_000, frequency: "annual", nextDueOn: date(120), ...escrowed, vendor: ["County Tax Office (Demo)", "tax_authority"] });
+    ob("austin1", "insurance", { kind: "insurance", label: "Landlord insurance", amountType: "periodic", expectedAmount: 210_000, frequency: "annual", nextDueOn: date(170), ...escrowed, vendor: ["Prairie Shield Insurance (Demo)", "insurer"] });
+    ob("austin1", "hoa", { kind: "hoa", label: "HOA dues", amountType: "fixed", expectedAmount: 8_500, frequency: "monthly", nextDueOn: date(10), vendor: ["Bluebonnet Commons HOA (Demo)", "hoa"] });
+    ob("austin1", "water", { kind: "water", label: "Water", amountType: "variable", expectedMin: 9_000, expectedMax: 13_000, expectedAmount: 11_000, frequency: "monthly", nextDueOn: date(19), vendor: ["City Water Utility (Demo)", "utility"] });
+
+    // Austin Rental #2 — vacant between tenants; its account is running low.
+    ob("austin2", "mortgage", { kind: "mortgage", label: "Mortgage (includes escrow)", amountType: "fixed", expectedAmount: 298_000, frequency: "monthly", nextDueOn: date(22), graceDays: 15, vendor: ["Lone Star Home Lending (Demo)", "lender"] });
+    ob("austin2", "tax", { kind: "property_tax", label: "Property tax", amountType: "periodic", expectedAmount: 760_000, frequency: "annual", nextDueOn: date(120), ...escrowed, vendor: ["County Tax Office (Demo)", "tax_authority"] });
+    ob("austin2", "insurance", { kind: "insurance", label: "Landlord insurance", amountType: "periodic", expectedAmount: 225_000, frequency: "annual", nextDueOn: date(95), ...escrowed, vendor: ["Prairie Shield Insurance (Demo)", "insurer"] });
+    ob("austin2", "electricity", { kind: "electricity", label: "Electricity (vacant unit)", amountType: "variable", expectedMin: 30_000, expectedMax: 46_000, expectedAmount: 38_000, frequency: "monthly", nextDueOn: date(11), vendor: ["Hill Country Electric (Demo)", "utility"] });
+
+    // Aspen Vacation Home — owned outright; the insurance renewal needs Alex's review.
+    ob("aspen", "tax", { kind: "property_tax", label: "Property tax", amountType: "periodic", expectedAmount: 1_115_000, frequency: "semiannual", nextDueOn: date(60), ...direct, vendor: ["County Treasurer (Demo)", "tax_authority"] });
+    const aspenIns = ob("aspen", "insurance", { kind: "insurance", label: "Homeowners insurance", amountType: "event", frequency: "annual", nextDueOn: date(24), ...direct, vendor: ["Summit Peak Insurance (Demo)", "insurer"] });
+    ob("aspen", "electricity", { kind: "electricity", label: "Electricity", amountType: "variable", expectedMin: 21_000, expectedMax: 29_000, expectedAmount: 25_000, frequency: "monthly", nextDueOn: date(13), vendor: ["Roaring Fork Power (Demo)", "utility"] });
+    ob("aspen", "gas", { kind: "gas", label: "Gas", amountType: "variable", expectedMin: 18_000, expectedMax: 34_000, expectedAmount: 26_000, frequency: "monthly", nextDueOn: date(15), vendor: ["Mountain Gas (Demo)", "utility"] });
+    ob("aspen", "snow", { kind: "maintenance", label: "Snow removal", priority: "important", amountType: "fixed", expectedAmount: 45_000, frequency: "monthly", nextDueOn: date(8), payMethod: "bank_bill_pay", vendor: ["High Country Services (Demo)", "maintenance"] });
+
+    // Bills. History is "paid (verified)" from the fictional bank statement.
+    const bills: Bill[] = [];
+    const billRow = (o: Obligation, key: string, amount: number, dueOn: string, p: Partial<Bill> = {}) => {
+      // Bills arrive before they're due: history on its due date, current ones two days ago.
+      const created = dueOn < date(0) ? `${dueOn}T09:00:00.000Z` : day(-2);
+      const row = add("bills", {
+        id: did(`bill:${o.id}:${key}`),
+        organizationId: orgId,
+        passportId: o.passportId,
+        obligationId: o.id,
+        amount,
+        currency: "USD",
+        dueOn,
+        periodLabel: null,
+        status: "received",
+        source: "demo",
+        fileKey: null,
+        fileName: null,
+        paidOn: null,
+        paymentReference: null,
+        verifiedAt: null,
+        reviewedBy: null,
+        reviewedAt: null,
+        secondReviewedBy: null,
+        secondReviewedAt: null,
+        createdBy: alex,
+        createdAt: created,
+        updatedAt: created,
+        ...p,
+      });
+      bills.push(row);
+      return row;
+    };
+    const paidRow = (o: Obligation, monthsAgo: number, amount: number) => {
+      const dueOn = addMonths(o.nextDueOn!, -monthsAgo);
+      return billRow(o, `m${monthsAgo}`, amount, dueOn, { status: "paid_verified", paidOn: dueOn, verifiedAt: `${dueOn}T18:00:00.000Z`, paymentReference: "Matched on the demo bank statement", updatedAt: `${dueOn}T18:00:00.000Z` });
+    };
+    // Eleven months of Miami electricity between $220 and $310 (median $305), then $2,870.
+    [31_000, 30_900, 30_800, 30_600, 30_500, 30_500, 28_900, 27_100, 25_600, 23_800, 22_000].forEach((amount, i) => paidRow(miamiPower, i + 1, amount));
+    billRow(miamiPower, "current", 287_000, miamiPower.nextDueOn!, { periodLabel: "Last month's usage" });
+    for (const m of [miamiMortgage, nycMortgage, a1Mortgage]) for (const k of [1, 2]) paidRow(m, k, m.expectedAmount!);
+    for (const k of [1, 2, 3]) paidRow(nycHoa, k, 185_000);
+    billRow(nycTax, "current", 965_000, nycTax.nextDueOn!, { status: "covered_by_escrow", periodLabel: "Quarterly installment" });
+    // The Aspen renewal notice, with a fictional PDF.
+    const renewalKey = `autopilot/${orgId}/renewal-notice-aspen.pdf`;
+    files.push({ key: renewalKey, bytes: demoPdf("Homeowners policy renewal notice (DEMO)", ["Summit Peak Insurance (Demo) — fictional insurer", "Insured: Morgan Family Holdings LLC (Demo)", "Property: 37 Silver Pine Way, Aspen, CO (fictional)", "Renewal premium: $14,200.00"]), mimeType: "application/pdf" });
+    billRow(aspenIns, "renewal", 1_420_000, aspenIns.nextDueOn!, { periodLabel: "Annual renewal", source: "document", fileKey: renewalKey, fileName: "renewal-notice-aspen.pdf" });
+
+    // The decision log, from the same rules the live service uses.
+    const accountsView = [operating, austinOps, austin2Ops, reserve].map((a) => ({ id: a.id, label: a.name, mask: a.mask, currency: a.currency, available: a.availableBalance, asOf: a.balanceAsOf, connectionOk: true }));
+    const inputs: PassportInput[] = specs.map((sp) => ({
+      passportId: DEMO_PASSPORTS[sp.key],
+      label: sp.label,
+      status: "live",
+      monitoring: "monitor",
+      currency: "USD",
+      today: date(0),
+      obligations: obligations.filter((o) => o.passportId === DEMO_PASSPORTS[sp.key]),
+      bills: bills.filter((b) => b.passportId === DEMO_PASSPORTS[sp.key]),
+      policies,
+      funding: (rows.funding_rules ?? []).find((f) => f.passportId === DEMO_PASSPORTS[sp.key]) ?? null,
+      accounts: accountsView,
+    }));
+    for (const a of assessPortfolio(inputs).assessments) {
+      for (const d of a.decisions) {
+        const bill = d.billId ? bills.find((b) => b.id === d.billId) : undefined;
+        const at = bill && (bill.status === "paid_verified" || bill.status === "covered_by_escrow") ? `${bill.dueOn}T18:00:00.000Z` : day(-1, 6);
+        add("autopilot_decisions", { id: did(`decision:${a.passportId}:${d.key}`), organizationId: orgId, passportId: a.passportId, obligationId: d.obligationId, billId: d.billId, outcome: d.outcome, severity: d.severity, summary: d.summary, reasons: d.reasons, rule: d.rule, amount: d.amount, currency: d.currency, evaluatedOn: at.slice(0, 10), dedupeKey: `${a.passportId}:${d.key}`, createdAt: at });
+      }
+    }
+  }
+
   // ------------------------------------------------------------------ 5. Blue Harbor Coffee Roasters — business acquisition (beta), in due diligence
   {
     const K = "blueharbor";
@@ -839,6 +1044,13 @@ export const SEED_ORDER: TableName[] = [
   "recordings",
   "ownership_records",
   "ownership_record_items",
+  "vendors",
+  "property_passports",
+  "review_policies",
+  "funding_rules",
+  "obligations",
+  "bills",
+  "autopilot_decisions",
   "message_threads",
   "messages",
   "message_reads",

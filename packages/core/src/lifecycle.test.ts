@@ -310,6 +310,15 @@ describe("closing lifecycle (in-memory, sandbox providers)", () => {
     const record = await h.db.ownership_records.findOne({ transactionId: txId });
     expect(record?.ownerNames).toEqual(["Olivia Carter"]);
     expect((await h.db.ownership_record_items.find({ ownershipRecordId: record!.id })).some((i) => i.kind === "signed_document")).toBe(true);
+    // Close → Live: the property moves straight into Property Autopilot (monitoring only).
+    const passport = await h.db.property_passports.findOne({ ownershipRecordId: record!.id });
+    expect(passport).toMatchObject({ status: "live", monitoring: "monitor", origin: "sagolik_closing" });
+    const costs = await h.db.obligations.find({ passportId: passport!.id });
+    // No tax amount was on file for this property, so none is invented: the owner is asked for it.
+    expect(costs.map((c) => c.kind).sort()).toEqual(["electricity", "insurance", "mortgage", "water"]);
+    expect(costs.every((c) => c.status === "suggested")).toBe(true); // inferred, so the owner confirms
+    const funding = await h.db.funding_rules.findOne({ passportId: passport!.id });
+    expect(funding!.operatingAccountId).not.toBeNull(); // the account whose ownership was verified at closing
   });
 
   it("closes the file after escrow disburses", async () => {

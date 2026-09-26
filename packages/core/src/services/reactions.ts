@@ -4,6 +4,7 @@
  */
 import type { TransactionState } from "@sagolik/types";
 import { onDomainEvent } from "../events";
+import { prepareFromOwnershipRecord } from "./autopilot";
 import { createOwnershipRecord } from "./closing";
 import { notify, participantUserIds } from "./notifications";
 
@@ -47,7 +48,10 @@ export function registerReactions() {
   });
 
   onDomainEvent("ownership.transferred", async (ctx, e) => {
-    if (e.transactionId) await createOwnershipRecord(ctx, e.transactionId);
+    if (!e.transactionId) return;
+    const record = await createOwnershipRecord(ctx, e.transactionId);
+    // Close → Live: the property moves straight into monitoring (no money is ever moved).
+    await prepareFromOwnershipRecord(ctx, record.id);
   });
 
   onDomainEvent("message.posted", async (ctx, e) => {

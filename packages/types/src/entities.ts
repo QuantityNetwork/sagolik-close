@@ -43,6 +43,21 @@ import {
   TransactionState,
   TransactionType,
   WebhookEventStatus,
+  AMOUNT_TYPES,
+  BILL_SOURCES,
+  BILL_STATUSES,
+  DECISION_OUTCOMES,
+  DECISION_SEVERITIES,
+  ESCROW_STATUSES_AUTOPILOT,
+  OBLIGATION_FREQUENCIES,
+  OBLIGATION_PRIORITIES,
+  OBLIGATION_SOURCES,
+  OBLIGATION_STATUSES,
+  ObligationKind,
+  PASSPORT_STATUSES,
+  PAY_METHODS,
+  REVIEW_ACTIONS,
+  VENDOR_CATEGORIES,
 } from "./enums";
 
 export const Uuid = z.string().uuid();
@@ -653,6 +668,129 @@ export const OwnershipRecordItem = z.object({
 });
 export type OwnershipRecordItem = z.infer<typeof OwnershipRecordItem>;
 
+// ---------------------------------------------------------------- Property Autopilot (monitor and verify)
+
+export const PropertyPassport = z.object({
+  ...base,
+  organizationId: Uuid,
+  propertyId: Uuid,
+  ownershipRecordId: nullable(Uuid),
+  origin: z.enum(["sagolik_closing", "imported"]),
+  label: z.string().min(2).max(120),
+  status: z.enum(PASSPORT_STATUSES),
+  monitoring: z.enum(["off", "monitor"]),
+  acquiredOn: nullable(DateOnly),
+  activatedAt: nullable(Timestamp),
+});
+export type PropertyPassport = z.infer<typeof PropertyPassport>;
+
+export const Vendor = z.object({
+  ...base,
+  organizationId: Uuid,
+  name: z.string().min(2).max(120),
+  category: z.enum(VENDOR_CATEGORIES),
+  phone: nullable(z.string().max(40)),
+  website: nullable(z.string().regex(/^https:\/\//)),
+});
+export type Vendor = z.infer<typeof Vendor>;
+
+export const Obligation = z.object({
+  ...base,
+  organizationId: Uuid,
+  passportId: Uuid,
+  vendorId: nullable(Uuid),
+  kind: ObligationKind,
+  label: z.string().min(2).max(120),
+  priority: z.enum(OBLIGATION_PRIORITIES),
+  amountType: z.enum(AMOUNT_TYPES),
+  expectedAmount: nullable(MinorUnits.nonnegative()),
+  expectedMin: nullable(MinorUnits.nonnegative()),
+  expectedMax: nullable(MinorUnits.nonnegative()),
+  currency: Currency,
+  frequency: z.enum(OBLIGATION_FREQUENCIES),
+  nextDueOn: nullable(DateOnly),
+  graceDays: z.number().int().min(0).max(90),
+  payMethod: z.enum(PAY_METHODS),
+  escrowStatus: z.enum(ESCROW_STATUSES_AUTOPILOT),
+  fundingAccountId: nullable(Uuid),
+  referenceLast4: nullable(z.string().regex(/^[0-9A-Za-z]{2,4}$/)),
+  payeeMatch: nullable(z.string().min(2).max(80)),
+  source: z.enum(OBLIGATION_SOURCES),
+  confidence: z.number().int().min(0).max(100),
+  status: z.enum(OBLIGATION_STATUSES),
+  endedOn: nullable(DateOnly),
+  createdBy: nullable(Uuid),
+});
+export type Obligation = z.infer<typeof Obligation>;
+
+export const Bill = z.object({
+  ...base,
+  organizationId: Uuid,
+  passportId: Uuid,
+  obligationId: Uuid,
+  amount: MinorUnits.nonnegative(),
+  currency: Currency,
+  dueOn: DateOnly,
+  periodLabel: nullable(z.string().max(60)),
+  status: z.enum(BILL_STATUSES),
+  source: z.enum(BILL_SOURCES),
+  fileKey: nullable(z.string().max(300)),
+  fileName: nullable(z.string().max(200)),
+  paidOn: nullable(DateOnly),
+  paymentReference: nullable(z.string().max(120)),
+  verifiedAt: nullable(Timestamp),
+  reviewedBy: nullable(Uuid),
+  reviewedAt: nullable(Timestamp),
+  secondReviewedBy: nullable(Uuid),
+  secondReviewedAt: nullable(Timestamp),
+  createdBy: nullable(Uuid),
+});
+export type Bill = z.infer<typeof Bill>;
+
+export const AutopilotDecision = z.object({
+  id: Uuid,
+  organizationId: Uuid,
+  passportId: Uuid,
+  obligationId: nullable(Uuid),
+  billId: nullable(Uuid),
+  outcome: z.enum(DECISION_OUTCOMES),
+  severity: z.enum(DECISION_SEVERITIES),
+  summary: z.string().min(3).max(300),
+  reasons: z.array(z.string()),
+  rule: nullable(z.string().max(120)),
+  amount: nullable(MinorUnits),
+  currency: nullable(Currency),
+  evaluatedOn: DateOnly,
+  dedupeKey: z.string().max(300),
+  createdAt: Timestamp,
+});
+export type AutopilotDecision = z.infer<typeof AutopilotDecision>;
+
+export const ReviewPolicy = z.object({
+  ...base,
+  organizationId: Uuid,
+  passportId: nullable(Uuid),
+  name: z.string().min(3).max(120),
+  obligationKind: nullable(ObligationKind),
+  minAmount: MinorUnits.nonnegative(),
+  maxAmount: nullable(MinorUnits.nonnegative()),
+  action: z.enum(REVIEW_ACTIONS),
+  position: z.number().int().nonnegative(),
+  enabled: z.boolean(),
+});
+export type ReviewPolicy = z.infer<typeof ReviewPolicy>;
+
+export const FundingRule = z.object({
+  ...base,
+  organizationId: Uuid,
+  passportId: Uuid,
+  operatingAccountId: nullable(Uuid),
+  reserveAccountId: nullable(Uuid),
+  minOperatingBalance: MinorUnits.nonnegative(),
+  targetOperatingBalance: MinorUnits.nonnegative(),
+});
+export type FundingRule = z.infer<typeof FundingRule>;
+
 // ---------------------------------------------------------------- messaging & notifications
 
 export const MessageThread = z.object({
@@ -918,6 +1056,13 @@ export const TABLE_SCHEMAS = {
   recordings: Recording,
   ownership_records: OwnershipRecord,
   ownership_record_items: OwnershipRecordItem,
+  property_passports: PropertyPassport,
+  vendors: Vendor,
+  obligations: Obligation,
+  bills: Bill,
+  autopilot_decisions: AutopilotDecision,
+  review_policies: ReviewPolicy,
+  funding_rules: FundingRule,
   message_threads: MessageThread,
   messages: Message,
   message_reads: MessageRead,
@@ -948,6 +1093,7 @@ export const APPEND_ONLY_TABLES = [
   "document_versions",
   "payment_events",
   "consent_records",
+  "autopilot_decisions",
 ] as const satisfies readonly TableName[];
 
 /**

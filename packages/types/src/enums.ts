@@ -75,6 +75,11 @@ export const ORGANIZATION_TYPES = [
   "brokerage",
   "ma_advisory",
   "accounting_firm",
+  // Owners (Property Autopilot): who owns and runs properties after closing.
+  "personal_portfolio",
+  "holding_entity",
+  "family_office",
+  "property_manager",
 ] as const;
 export const OrganizationType = e(ORGANIZATION_TYPES).schema;
 export type OrganizationType = (typeof ORGANIZATION_TYPES)[number];
@@ -325,3 +330,65 @@ export type InstructionStatus = (typeof INSTRUCTION_STATUSES)[number];
 export const RISK_LEVELS = ["low", "medium", "high", "critical"] as const;
 export const RiskLevel = e(RISK_LEVELS).schema;
 export type RiskLevel = (typeof RISK_LEVELS)[number];
+
+// ---------------------------------------------------------------- Property Autopilot (monitor and verify)
+
+export const OBLIGATION_KINDS = [
+  "mortgage",
+  "property_tax",
+  "insurance",
+  "hoa",
+  "electricity",
+  "water",
+  "gas",
+  "internet",
+  "security",
+  "property_management",
+  "maintenance",
+  "other",
+] as const;
+export const ObligationKind = e(OBLIGATION_KINDS).schema;
+export type ObligationKind = (typeof OBLIGATION_KINDS)[number];
+
+export const OBLIGATION_PRIORITIES = ["critical", "important", "optional"] as const;
+export type ObligationPriority = (typeof OBLIGATION_PRIORITIES)[number];
+export const AMOUNT_TYPES = ["fixed", "variable", "periodic", "event", "manual"] as const;
+export type AmountType = (typeof AMOUNT_TYPES)[number];
+export const OBLIGATION_FREQUENCIES = ["monthly", "quarterly", "semiannual", "annual", "once", "irregular"] as const;
+export type ObligationFrequency = (typeof OBLIGATION_FREQUENCIES)[number];
+/** How the owner pays. Sagolik never pays. */
+export const PAY_METHODS = ["autopay", "bank_bill_pay", "escrow", "manual", "unknown"] as const;
+export type PayMethod = (typeof PAY_METHODS)[number];
+export const ESCROW_STATUSES_AUTOPILOT = ["confirmed_escrowed", "confirmed_not_escrowed", "possibly_escrowed", "unknown", "not_applicable"] as const;
+export type ObligationEscrowStatus = (typeof ESCROW_STATUSES_AUTOPILOT)[number];
+export const OBLIGATION_SOURCES = ["closing", "document", "bank_history", "manual", "demo"] as const;
+export const OBLIGATION_STATUSES = ["suggested", "active", "paused", "ended"] as const;
+export type ObligationStatus = (typeof OBLIGATION_STATUSES)[number];
+export const BILL_STATUSES = ["received", "paid_reported", "paid_verified", "covered_by_escrow", "disputed", "cancelled"] as const;
+export type BillStatus = (typeof BILL_STATUSES)[number];
+export const BILL_SOURCES = ["manual", "document", "bank_history", "demo"] as const;
+export const VENDOR_CATEGORIES = ["lender", "tax_authority", "insurer", "hoa", "utility", "telecom", "security", "property_manager", "maintenance", "other"] as const;
+export type VendorCategory = (typeof VENDOR_CATEGORIES)[number];
+export const DECISION_OUTCOMES = [
+  "routine",
+  "paid_verified",
+  "paid_reported",
+  "awaiting_bill",
+  "review_required",
+  "two_person_review",
+  "flagged",
+  "covered_by_escrow",
+  "verify_escrow",
+  "anomaly",
+  "duplicate_risk",
+  "overdue",
+  "funding_shortfall",
+  "missing_information",
+] as const;
+export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
+export const DECISION_SEVERITIES = ["info", "action_required", "urgent", "critical"] as const;
+export type DecisionSeverity = (typeof DECISION_SEVERITIES)[number];
+export const REVIEW_ACTIONS = ["routine", "owner_review", "two_person_review", "flag"] as const;
+export type ReviewAction = (typeof REVIEW_ACTIONS)[number];
+export const PASSPORT_STATUSES = ["preparing", "live", "sale_pending", "sold"] as const;
+export type PassportStatus = (typeof PASSPORT_STATUSES)[number];

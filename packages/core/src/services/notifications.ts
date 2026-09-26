@@ -21,6 +21,9 @@ export const NOTIFICATION_KINDS = {
   status_update: { label: "Transaction progress updates", sensitive: false, defaultSms: false },
   message_mention: { label: "Mentions in messages", sensitive: false, defaultSms: false },
   task_assigned: { label: "New tasks for you", sensitive: false, defaultSms: false },
+  autopilot_live: { label: "Property Autopilot set up", sensitive: false, defaultSms: false },
+  autopilot_attention: { label: "Property Autopilot: something needs your attention", sensitive: true, defaultSms: false },
+  autopilot_urgent: { label: "Property Autopilot: urgent (unusual bills, overdue, shortfalls)", sensitive: true, defaultSms: true },
 } as const;
 export type NotificationKind = keyof typeof NOTIFICATION_KINDS;
 

@@ -69,6 +69,18 @@ export const AUDIT_ACTIONS = [
   "admin.privileged_access",
   "admin.feature_flag_changed",
   "assistant.query",
+  "autopilot.prepared",
+  "autopilot.property_imported",
+  "autopilot.obligation_added",
+  "autopilot.obligation_updated",
+  "autopilot.bill_added",
+  "autopilot.bill_paid_reported",
+  "autopilot.bill_reviewed",
+  "autopilot.bill_status_changed",
+  "autopilot.bill_file_viewed",
+  "autopilot.funding_updated",
+  "autopilot.policy_updated",
+  "autopilot.monitoring_changed",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

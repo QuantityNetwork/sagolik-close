@@ -56,6 +56,8 @@ class MemoryTable<T extends { id: string }> implements Table<T> {
 
   private checkUnique(row: T, ignoreId?: string) {
     for (const cols of UNIQUE_KEYS[this.name] ?? []) {
+      // As in PostgreSQL, NULLs are distinct: a key with a null part never conflicts.
+      if (cols.some((c) => (row as Record<string, unknown>)[c] == null)) continue;
       for (const other of this.rows.values()) {
         if (other.id === ignoreId) continue;
         if (cols.every((c) => (other as Record<string, unknown>)[c] === (row as Record<string, unknown>)[c])) {

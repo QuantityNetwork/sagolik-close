@@ -24,7 +24,8 @@ create type public.participant_role as enum (
 create type public.organization_role as enum ('organization_admin','member','auditor');
 create type public.organization_type as enum (
   'real_estate_agency','title_company','law_firm','mortgage_lender','escrow_provider','bank','developer',
-  'property_company','brokerage','ma_advisory','accounting_firm');
+  'property_company','brokerage','ma_advisory','accounting_firm',
+  'personal_portfolio','holding_entity','family_office','property_manager');
 create type public.participant_status as enum ('invited','active','declined','removed');
 create type public.task_status as enum ('todo','in_progress','blocked','waiting','complete','waived');
 create type public.task_priority as enum ('low','normal','high','urgent');

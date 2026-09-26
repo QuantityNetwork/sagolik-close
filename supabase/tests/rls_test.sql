@@ -167,6 +167,55 @@ set local role authenticated;
 select pg_temp.eq((select count(*) from public.companies), 0, 'home buyer cannot see companies in other deals');
 rollback;
 
+-- ----------------------------------------------------------------------------- Property Autopilot (owner portfolios)
+begin;
+select pg_temp.login('alex.morgan@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.property_passports), 5, 'the owner sees the five properties in their portfolio');
+select pg_temp.eq((select count(*) from public.bills where status = 'received'), 2, 'the owner sees their open bills (escrowed tax is not payable)');
+select pg_temp.eq((select count(*) from public.review_policies), 10, 'the owner sees their review rules');
+select pg_temp.eq((select count(*) from public.transactions), 0, 'owner without a closing sees no transactions');
+do $$ begin
+  begin
+    update public.bills set status = 'paid_verified', verified_at = now();
+    raise exception 'FAIL: a client marked a bill as verified';
+  exception when insufficient_privilege then raise notice 'ok: clients cannot mark bills paid or verified';
+  end;
+end $$;
+do $$ begin
+  begin
+    insert into public.autopilot_decisions (organization_id, passport_id, outcome, severity, summary, evaluated_on, dedupe_key)
+      select organization_id, id, 'routine', 'info', 'forged', current_date, 'forged' from public.property_passports limit 1;
+    raise exception 'FAIL: a client wrote to the decision log';
+  exception when insufficient_privilege then raise notice 'ok: clients cannot write decisions';
+  end;
+end $$;
+rollback;
+
+begin;
+select pg_temp.login('olivia.carter@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.property_passports), 0, 'IDOR: another person cannot see the portfolio');
+select pg_temp.eq((select count(*) from public.obligations), 0, 'IDOR: or its costs');
+select pg_temp.eq((select count(*) from public.bills), 0, 'IDOR: or its bills');
+select pg_temp.eq((select count(*) from public.autopilot_decisions), 0, 'IDOR: or its decision log');
+select pg_temp.eq((select count(*) from public.funding_rules), 0, 'IDOR: or its funding rules');
+rollback;
+
+-- The decision log is append-only, even for the service role.
+begin;
+set local role service_role;
+do $$ begin
+  begin
+    update public.autopilot_decisions set summary = 'rewritten';
+    raise exception 'FAIL: a decision was rewritten';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+    raise notice 'ok: decisions are append-only';
+  end;
+end $$;
+rollback;
+
 -- ----------------------------------------------------------------------------- platform admin: no implicit data access
 begin;
 select pg_temp.login('admin@demo.sagolik.test');
