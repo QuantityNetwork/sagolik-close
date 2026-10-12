@@ -26,7 +26,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <header className="border-b border-line bg-navy-800">
         <div className="container-page flex h-16 items-center justify-between">
           <Logo variant="light" className="h-7 w-auto" href="/app" />
-          <span className="rounded-full bg-white/10 px-3 py-1 text-[12px] font-medium text-white">Internal admin</span>
+          <span className="rounded-control bg-white/10 px-3 py-1 text-[12px] font-medium text-white">Internal admin</span>
         </div>
       </header>
       <main id="main" className="container-page space-y-6 py-8">
@@ -164,7 +164,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                 Action
               </label>
               <input id="action" name="action" defaultValue={sp.action ?? ""} placeholder="e.g. payment.settled" className="h-9 flex-1 rounded-lg border border-line-strong px-3 text-sm" />
-              <button className="rounded-full bg-navy-800 px-4 text-sm text-white">Search</button>
+              <button className="rounded-control bg-navy-800 px-4 text-sm text-white">Search</button>
             </form>
           </CardBody>
           <Table>

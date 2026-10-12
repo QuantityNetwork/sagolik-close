@@ -22,7 +22,7 @@ export default async function CashFlowPage({ params, searchParams }: { params: P
       <div className="flex flex-wrap items-center justify-between gap-3">
         <nav aria-label="Horizon" className="flex gap-1">
           {HORIZONS.map((h) => (
-            <Link key={h} href={`/app/autopilot/${id}/cash-flow?days=${h}`} aria-current={h === days ? "page" : undefined} className={cn("rounded-full px-3 py-1 text-[13px]", h === days ? "bg-navy-800 text-white" : "text-ink-2 hover:bg-navy-50")}>
+            <Link key={h} href={`/app/autopilot/${id}/cash-flow?days=${h}`} aria-current={h === days ? "page" : undefined} className={cn("rounded-control px-3 py-1 text-[13px]", h === days ? "bg-navy-800 text-white" : "text-ink-2 hover:bg-navy-50")}>
               {h} days
             </Link>
           ))}

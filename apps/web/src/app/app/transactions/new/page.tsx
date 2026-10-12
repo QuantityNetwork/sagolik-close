@@ -29,10 +29,10 @@ export default async function NewTransactionPage({ searchParams }: { searchParam
       <h1 className="text-[34px] text-navy-800">{business ? "Open a business acquisition" : "Open a transaction"}</h1>
       <p className="mt-1 text-sm text-ink-3">You can invite everyone else on the next screen.</p>
       <nav aria-label="Kind of deal" className="mt-4 inline-flex rounded-full border border-line bg-paper p-1 text-sm">
-        <Link href="/app/transactions/new" aria-current={!business ? "page" : undefined} className={`rounded-full px-4 py-1.5 ${!business ? "bg-navy-800 text-white" : "text-ink-2"}`}>
+        <Link href="/app/transactions/new" aria-current={!business ? "page" : undefined} className={`rounded-control px-4 py-1.5 ${!business ? "bg-navy-800 text-white" : "text-ink-2"}`}>
           Real estate
         </Link>
-        <Link href="/app/transactions/new?kind=business" aria-current={business ? "page" : undefined} className={`rounded-full px-4 py-1.5 ${business ? "bg-navy-800 text-white" : "text-ink-2"}`}>
+        <Link href="/app/transactions/new?kind=business" aria-current={business ? "page" : undefined} className={`rounded-control px-4 py-1.5 ${business ? "bg-navy-800 text-white" : "text-ink-2"}`}>
           Business acquisition <span className="text-[11px] opacity-80">(beta)</span>
         </Link>
       </nav>

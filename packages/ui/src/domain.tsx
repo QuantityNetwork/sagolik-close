@@ -26,8 +26,8 @@ export function ProgressBar({ value, label, className }: { value: number; label:
   const v = Math.max(0, Math.min(100, Math.round(value)));
   return (
     <div className={className}>
-      <div role="progressbar" aria-label={label} aria-valuenow={v} aria-valuemin={0} aria-valuemax={100} className="h-1.5 w-full overflow-hidden rounded-full bg-navy-100">
-        <div className="h-full rounded-full bg-teal-600 transition-[width] duration-500" style={{ width: `${v}%` }} />
+      <div role="progressbar" aria-label={label} aria-valuenow={v} aria-valuemin={0} aria-valuemax={100} className="h-1 w-full overflow-hidden rounded-full bg-navy-100">
+        <div className="h-full rounded-full bg-teal-600 transition-[width] duration-700 ease-out" style={{ width: `${v}%` }} />
       </div>
     </div>
   );
@@ -40,10 +40,10 @@ export function ProgressRing({ value, size = 64, label }: { value: number; size?
   return (
     <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }} role="img" aria-label={`${label}: ${Math.round(v)}%`}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={6} className="stroke-navy-100" />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={6} strokeLinecap="round" className="stroke-teal-600" strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)} />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={3} className="stroke-navy-100" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={3} strokeLinecap="round" className="stroke-teal-600 transition-[stroke-dashoffset] duration-700 ease-out" strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)} />
       </svg>
-      <span className="absolute text-sm font-semibold text-navy-800 num">{Math.round(v)}%</span>
+      <span className="absolute font-display text-[15px] text-navy-800 num">{Math.round(v)}%</span>
     </div>
   );
 }
@@ -61,13 +61,13 @@ export function ProgressStepper({ steps, className }: { steps: StepperStep[]; cl
       {steps.map((s, i) => (
         <li key={s.key} className="relative flex flex-1 flex-col items-center text-center" aria-current={s.state === "current" ? "step" : undefined}>
           {i > 0 ? (
-            <span aria-hidden className={cn("absolute top-[9px] right-1/2 h-0.5 w-full -translate-x-[10px]", steps[i - 1]!.state === "complete" ? "bg-teal-600" : "bg-line-strong")} />
+            <span aria-hidden className={cn("absolute top-[9px] right-1/2 h-px w-full -translate-x-[10px]", steps[i - 1]!.state === "complete" ? "bg-navy-800" : "bg-line-strong")} />
           ) : null}
           <span
             className={cn(
-              "relative z-10 flex h-5 w-5 items-center justify-center rounded-full border-2 text-[10px]",
-              s.state === "complete" && "border-teal-600 bg-teal-600 text-white",
-              s.state === "current" && "border-navy-800 bg-paper",
+              "relative z-10 flex h-5 w-5 items-center justify-center rounded-full border text-[10px]",
+              s.state === "complete" && "border-navy-800 bg-navy-800 text-white",
+              s.state === "current" && "border-teal-600 bg-paper ring-4 ring-teal-600/12",
               s.state === "blocked" && "border-danger bg-danger-50",
               s.state === "upcoming" && "border-line-strong bg-paper",
             )}
@@ -77,10 +77,10 @@ export function ProgressStepper({ steps, className }: { steps: StepperStep[]; cl
                 <path d="M2.5 6.2 5 8.5l4.5-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             ) : s.state === "current" ? (
-              <span className="h-2 w-2 rounded-full bg-navy-800" />
+              <span className="h-2 w-2 rounded-full bg-teal-600" />
             ) : null}
           </span>
-          <span className={cn("mt-1.5 hidden text-[11px] leading-tight sm:block", s.state === "current" ? "font-semibold text-navy-800" : s.state === "complete" ? "text-ink-2" : "text-ink-3")}>{s.label}</span>
+          <span className={cn("mt-2 hidden text-[11px] leading-tight tracking-[0.01em] sm:block", s.state === "current" ? "font-semibold text-navy-800" : s.state === "complete" ? "text-ink-2" : "text-ink-3")}>{s.label}</span>
           <span className="sr-only">
             {s.label}: {s.state}
           </span>
@@ -102,8 +102,8 @@ export interface TimelineItem {
 }
 
 const TL_DOT: Record<TimelineItem["status"], string> = {
-  complete: "bg-teal-600 border-teal-600",
-  current: "bg-paper border-navy-800 ring-4 ring-navy-100",
+  complete: "bg-navy-800 border-navy-800",
+  current: "bg-paper border-teal-600 ring-4 ring-teal-600/12",
   upcoming: "bg-paper border-line-strong",
   blocked: "bg-danger border-danger ring-4 ring-danger-50",
   attention: "bg-attention border-attention ring-4 ring-attention-50",
@@ -114,8 +114,8 @@ export function Timeline({ items, className }: { items: TimelineItem[]; classNam
     <ol className={cn("relative", className)}>
       {items.map((it, i) => (
         <li key={it.key} className="relative flex gap-4 pb-6 last:pb-0">
-          {i < items.length - 1 ? <span aria-hidden className={cn("absolute top-5 left-[7px] h-[calc(100%-12px)] w-0.5", it.status === "complete" ? "bg-teal-600/60" : "bg-line")} /> : null}
-          <span aria-hidden className={cn("relative mt-1 h-4 w-4 shrink-0 rounded-full border-2", TL_DOT[it.status])} />
+          {i < items.length - 1 ? <span aria-hidden className={cn("absolute top-5 left-[6px] h-[calc(100%-12px)] w-px", it.status === "complete" ? "bg-navy-800/50" : "bg-line-strong")} /> : null}
+          <span aria-hidden className={cn("relative mt-1 h-[13px] w-[13px] shrink-0 rounded-full border", TL_DOT[it.status])} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <p className={cn("text-sm font-medium", it.status === "upcoming" ? "text-ink-3" : "text-ink")}>{it.title}</p>
@@ -141,7 +141,7 @@ export function initials(name: string) {
     .join("");
 }
 
-const AVATAR_TINTS = ["bg-navy-100 text-navy-800", "bg-teal-100 text-teal-800", "bg-sand text-ink-2", "bg-[#efe6f5] text-[#4b2a66]", "bg-[#f7ebe0] text-[#7a3f12]"];
+const AVATAR_TINTS = ["bg-navy-100 text-navy-800", "bg-teal-100 text-teal-800", "bg-sand text-ink-2", "bg-brass-100 text-brass-700", "bg-navy-800 text-white"];
 
 export function ParticipantAvatar({ name, size = 36, className }: { name: string; size?: number; className?: string }) {
   const tint = AVATAR_TINTS[[...name].reduce((a, c) => a + c.charCodeAt(0), 0) % AVATAR_TINTS.length];

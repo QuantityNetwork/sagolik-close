@@ -4,54 +4,77 @@
 @source "../../../../packages/ui/src";
 
 /* ---------------------------------------------------------------------------
-   Sagolik Close design tokens
-   Brand: deep navy #032a52, restrained teal #007888, warm white canvas.
+   Sagolik Close design tokens — "institutional" edition.
+   Deep navy ink on ivory paper, a restrained teal for signals and a little
+   brass for editorial detail (numerals, rules, exhibit labels). Crisp corners,
+   hairline rules, almost no shadow: the look of a well-set report.
    --------------------------------------------------------------------------- */
 @theme {
-  --color-navy-950: #011326;
-  --color-navy-900: #021c38;
-  --color-navy-800: #032a52;
-  --color-navy-700: #0b3a6b;
-  --color-navy-600: #1d4e82;
-  --color-navy-100: #e3eaf3;
-  --color-navy-50: #f1f5fa;
+  --color-navy-950: #061322;
+  --color-navy-900: #0a1d33;
+  --color-navy-800: #0f2a47;
+  --color-navy-700: #1c3d63;
+  --color-navy-600: #2e5480;
+  --color-navy-100: #e1e7ef;
+  --color-navy-50: #f2f5f9;
 
-  --color-teal-800: #004c56;
-  --color-teal-700: #005f6b;
-  --color-teal-600: #007888;
-  --color-teal-500: #1a8f9c;
-  --color-teal-300: #6fc8cc;
-  --color-teal-100: #d7eef0;
-  --color-teal-50: #eef8f8;
+  --color-teal-800: #0b4d55;
+  --color-teal-700: #0e5f68;
+  --color-teal-600: #127783;
+  --color-teal-500: #2a8c96;
+  --color-teal-300: #7cc3c8;
+  --color-teal-100: #d8ebed;
+  --color-teal-50: #eef6f7;
 
-  --color-canvas: #faf8f4;
+  --color-brass-700: #7a5f2f;
+  --color-brass-600: #8f7240;
+  --color-brass-500: #ad8e58;
+  --color-brass-300: #d6c29b;
+  --color-brass-100: #efe7d6;
+  --color-brass-50: #f8f4eb;
+
+  --color-canvas: #f6f4ef;
   --color-paper: #ffffff;
-  --color-sand: #f3efe8;
-  --color-line: #e7e2d9;
-  --color-line-strong: #d6cfc3;
+  --color-sand: #eeeae2;
+  --color-line: #e2ddd3;
+  --color-line-strong: #cbc4b6;
 
-  --color-ink: #16202c;
-  --color-ink-2: #3c4859;
-  --color-ink-3: #6b7686;
-  --color-ink-4: #9aa3af;
+  --color-ink: #0f1722;
+  --color-ink-2: #354052;
+  --color-ink-3: #5c6878;
+  --color-ink-4: #949dab;
 
-  --color-success: #1f7a4d;
-  --color-success-50: #eaf5ef;
-  --color-attention: #9a5b00;
-  --color-attention-50: #fdf4e3;
-  --color-danger: #b42318;
-  --color-danger-50: #fdecea;
+  --color-success: #1d6b45;
+  --color-success-50: #e9f3ed;
+  --color-attention: #8a5200;
+  --color-attention-50: #fbf2e1;
+  --color-danger: #a6241b;
+  --color-danger-50: #fbebe9;
 
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: var(--font-dm-serif), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --font-display: var(--font-serif), "Iowan Old Style", "Palatino Linotype", Georgia, serif;
 
-  --shadow-card: 0 1px 2px rgb(3 42 82 / 0.04), 0 1px 1px rgb(3 42 82 / 0.03);
-  --shadow-float: 0 12px 40px -12px rgb(3 42 82 / 0.22), 0 2px 6px rgb(3 42 82 / 0.06);
+  --shadow-card: 0 1px 0 rgb(10 29 51 / 0.03);
+  --shadow-float: 0 1px 2px rgb(10 29 51 / 0.05), 0 24px 48px -28px rgb(10 29 51 / 0.35);
 
-  --radius-card: 10px;
+  /* Crisp corners everywhere: these override Tailwind's radius scale. */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 5px;
+  --radius-2xl: 6px;
+  --radius-3xl: 8px;
+  --radius-control: 3px;
+  --radius-card: 4px;
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @layer base {
+  :root {
+    interpolate-size: allow-keywords;
+  }
   html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -65,20 +88,26 @@
   h1, h2, h3, .font-display {
     font-family: var(--font-display);
     font-weight: 400;
-    letter-spacing: -0.01em;
+    font-optical-sizing: auto;
+    letter-spacing: -0.012em;
+    font-feature-settings: "kern", "liga", "lnum";
+  }
+  h1 {
+    text-wrap: balance;
   }
   ::selection {
-    background: var(--color-teal-100);
+    background: var(--color-brass-100);
     color: var(--color-navy-900);
   }
   :focus-visible {
     outline: 2px solid var(--color-teal-600);
     outline-offset: 2px;
-    border-radius: 4px;
+    border-radius: 2px;
   }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
@@ -87,28 +116,287 @@
 
 @layer components {
   .eyebrow {
-    @apply text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-3;
+    @apply text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-3;
+  }
+  /* Eyebrow with a short brass rule in front — section kickers. */
+  .kicker {
+    @apply inline-flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-brass-700;
+  }
+  .kicker::before {
+    content: "";
+    width: 28px;
+    height: 1px;
+    background: currentColor;
   }
   .container-page {
-    @apply mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8;
+    @apply mx-auto w-full max-w-[1240px] px-4 sm:px-6 lg:px-10;
   }
   .num {
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: tabular-nums lining-nums;
+  }
+  /* Serif section numerals: 01, 02 … */
+  .section-num {
+    font-family: var(--font-display);
+    font-variant-numeric: lining-nums tabular-nums;
+    @apply text-[13px] tracking-[0.08em] text-brass-700;
+  }
+  /* Underline that draws in on hover. */
+  .link-u {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0% 1px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    transition: background-size 0.35s var(--ease-out-quart);
+  }
+  .link-u:hover,
+  .link-u:focus-visible {
+    background-size: 100% 1px;
+  }
+  /* Buttons: the trailing arrow nudges forward on hover. */
+  .btn > svg:last-child:not(:first-child) {
+    transition: transform 0.25s var(--ease-out-quart);
+  }
+  .btn:hover > svg:last-child:not(:first-child) {
+    transform: translateX(3px);
+  }
+  /* Exhibit frame: a report-style figure with a heavy top rule. */
+  .exhibit {
+    @apply border-t-2 border-navy-800 pt-4;
+  }
+  .exhibit-label {
+    @apply text-[10.5px] font-semibold uppercase tracking-[0.22em] text-brass-700;
+  }
+  .exhibit-title {
+    font-family: var(--font-display);
+    @apply mt-1 text-[19px] leading-snug text-navy-800;
+  }
+  .exhibit-note {
+    @apply mt-3 border-t border-line pt-2 text-[11.5px] leading-relaxed text-ink-3;
+  }
+  .exhibit svg text {
+    font-family: var(--font-sans);
   }
 }
 
-/* Subtle entrance for pages (disabled for reduced motion above). */
+/* ---------------------------------------------------------------------------
+   Motion. Calm and purposeful: things settle into place once, diagrams draw
+   themselves, data flows quietly. Everything is decoration on top of content
+   that is already readable: with reduced motion, without JavaScript, or in a
+   browser without these features, the page is simply static.
+   --------------------------------------------------------------------------- */
+
+/* Page and hero entrances (time-based, run on load). */
 @keyframes rise {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
+@keyframes enter-up {
+  from { opacity: 0; transform: translate3d(0, 22px, 0); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes enter-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes draw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes flow {
+  to { stroke-dashoffset: -24; }
+}
+@keyframes pulse-ring {
+  0% { transform: scale(1); opacity: 0.5; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+@keyframes travel {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+
 .animate-rise {
-  animation: rise 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  animation: rise 420ms var(--ease-out-quart) both;
+}
+/* Staggered entrance: set --d (delay) inline, e.g. style={{"--d": "120ms"}}. */
+.enter {
+  animation: enter-up 900ms var(--ease-out-expo) both;
+  animation-delay: var(--d, 0ms);
+}
+.enter-fade {
+  animation: enter-fade 1100ms var(--ease-out-quart) both;
+  animation-delay: var(--d, 0ms);
+}
+.enter-rule {
+  transform-origin: 0 50%;
+  animation: grow-x 1200ms var(--ease-out-expo) both;
+  animation-delay: var(--d, 0ms);
+}
+/* SVG paths that draw themselves on load (use pathLength="1"). */
+.draw-on-load {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: draw 1400ms var(--ease-out-quart) forwards;
+  animation-delay: var(--d, 0ms);
+}
+
+/* Continuous, quiet motion for diagrams. */
+.flow {
+  stroke-dasharray: 2 10;
+  animation: flow 1.8s linear infinite;
+  animation-delay: var(--d, 0ms);
+}
+.flow-reverse {
+  animation-direction: reverse;
+}
+.pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse-ring 2.8s var(--ease-out-quart) infinite;
+  animation-delay: var(--d, 0ms);
+}
+.travel {
+  animation: travel 7s var(--ease-out-quart) infinite;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes guilloche {
+  to { transform: translateX(-240px); }
+}
+.guilloche-drift {
+  animation: guilloche 24s linear infinite;
+}
+@keyframes sweep {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(400%); }
+}
+.control-sweep {
+  animation: sweep 5s var(--ease-out-quart) infinite;
+  animation-delay: 1.5s;
+}
+
+/* Scroll reveal. <MotionRoot/> sets html[data-motion] once it is running and
+   adds [data-revealed] to each [data-reveal] element as it enters the view.
+   Until then (or without JavaScript) nothing is hidden. */
+[data-reveal] {
+  transition:
+    opacity 750ms var(--ease-out-quart),
+    transform 900ms var(--ease-out-expo);
+  transition-delay: calc(var(--i, 0) * 70ms);
+}
+html[data-motion] [data-reveal]:not([data-revealed]) {
+  opacity: 0;
+  transform: translate3d(0, 20px, 0);
+}
+html[data-motion] [data-reveal="fade"]:not([data-revealed]) {
+  transform: none;
+}
+/* Inside a revealed block: lines draw, rules grow, bars fill, items follow. */
+[data-reveal] .draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 1300ms var(--ease-out-quart);
+  transition-delay: calc(var(--d, 0ms) + var(--i, 0) * 90ms);
+}
+html[data-motion] [data-reveal]:not([data-revealed]) .draw {
+  stroke-dashoffset: 1;
+}
+[data-reveal] .grow {
+  transform-origin: 0 50%;
+  transition: transform 1300ms var(--ease-out-expo);
+  transition-delay: calc(var(--d, 0ms) + var(--i, 0) * 90ms);
+}
+html[data-motion] [data-reveal]:not([data-revealed]) .grow {
+  transform: scaleX(0);
+}
+[data-reveal] .grow-y {
+  transform-origin: 50% 100%;
+  transition: transform 1100ms var(--ease-out-expo);
+  transition-delay: calc(var(--d, 0ms) + var(--i, 0) * 90ms);
+}
+html[data-motion] [data-reveal]:not([data-revealed]) .grow-y {
+  transform: scaleY(0);
+}
+[data-reveal] .follow {
+  transition:
+    opacity 600ms var(--ease-out-quart),
+    transform 800ms var(--ease-out-expo);
+  transition-delay: calc(var(--d, 0ms) + var(--i, 0) * 70ms);
+}
+html[data-motion] [data-reveal]:not([data-revealed]) .follow {
+  opacity: 0;
+  transform: translate3d(0, 10px, 0);
+}
+[data-reveal] .follow-fade {
+  transition: opacity 700ms var(--ease-out-quart);
+  transition-delay: calc(var(--d, 0ms) + var(--i, 0) * 80ms);
+}
+html[data-motion] [data-reveal]:not([data-revealed]) .follow-fade {
+  opacity: 0;
+}
+
+/* Scroll-linked touches where the browser supports scroll-driven animation. */
+.read-progress {
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+}
+@supports (animation-timeline: scroll()) {
+  @keyframes progress-x {
+    to { transform: scaleX(1); }
+  }
+  .read-progress {
+    animation: progress-x linear both;
+    animation-timeline: scroll(root);
+  }
+  @keyframes header-settle {
+    to {
+      box-shadow: 0 1px 0 var(--color-line), 0 12px 32px -24px rgb(10 29 51 / 0.35);
+    }
+  }
+  .site-header {
+    animation: header-settle linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 140px;
+  }
+  @keyframes slow-zoom {
+    from { transform: scale(1.12); }
+    to { transform: scale(1); }
+  }
+  .zoom-on-scroll {
+    animation: slow-zoom linear both;
+    animation-timeline: view();
+    animation-range: entry 0% cover 60%;
+  }
+}
+
+/* Accordions open smoothly where ::details-content is supported. */
+@supports selector(::details-content) {
+  details.smooth::details-content {
+    block-size: 0;
+    overflow: hidden;
+    transition:
+      block-size 420ms var(--ease-out-quart),
+      content-visibility 420ms allow-discrete;
+  }
+  details.smooth[open]::details-content {
+    block-size: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow, .pulse, .travel, .guilloche-drift, .control-sweep, .zoom-on-scroll, .read-progress, .site-header {
+    animation: none !important;
+  }
+  .flow {
+    stroke-dasharray: none;
+  }
 }
 
 /* Long-form text (legal pages) */
-.legal h1 { font-family: var(--font-display); font-size: 2.5rem; line-height: 1.15; color: var(--color-navy-800); }
-.legal h2 { margin-top: 2rem; font-size: 1.125rem; font-weight: 600; color: var(--color-ink); }
-.legal p, .legal ul { margin-top: 0.75rem; font-size: 0.9375rem; line-height: 1.7; color: var(--color-ink-2); }
+.legal h1 { font-family: var(--font-display); font-size: 2.75rem; line-height: 1.1; color: var(--color-navy-800); letter-spacing: -0.015em; }
+.legal h2 { margin-top: 2.5rem; padding-top: 1.25rem; border-top: 1px solid var(--color-line); font-family: var(--font-display); font-size: 1.375rem; color: var(--color-navy-800); }
+.legal p, .legal ul { margin-top: 0.875rem; font-size: 0.9375rem; line-height: 1.75; color: var(--color-ink-2); }
 .legal ul { list-style: disc; padding-left: 1.25rem; }
 .legal li + li { margin-top: 0.375rem; }
+.legal li::marker { color: var(--color-brass-600); }

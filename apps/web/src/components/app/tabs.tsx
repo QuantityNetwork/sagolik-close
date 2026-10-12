@@ -16,13 +16,14 @@ export function TabNav({ tabs, label }: { tabs: Array<{ href: string; label: str
                 href={t.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex items-center gap-1.5 border-b-2 px-3 py-3 text-[13.5px] transition-colors",
-                  active ? "border-navy-800 font-medium text-navy-800" : "border-transparent text-ink-3 hover:text-ink",
+                  "relative inline-flex items-center gap-1.5 px-3 py-3.5 text-[13.5px] transition-colors duration-200",
+                  "after:absolute after:inset-x-3 after:-bottom-px after:h-[2px] after:origin-left after:bg-navy-800 after:transition-transform after:duration-300 after:ease-out",
+                  active ? "font-medium text-navy-900 after:scale-x-100" : "text-ink-3 after:scale-x-0 hover:text-ink hover:after:scale-x-100 hover:after:bg-line-strong",
                 )}
               >
-                {t.icon ? <ProductIcon name={t.icon} tone={active ? "brand" : "mono"} size={16} /> : null}
+                {t.icon ? <ProductIcon name={t.icon} tone={active ? "brand" : "mono"} size={15} /> : null}
                 {t.label}
-                {t.count ? <span className="rounded-full bg-attention-50 px-1.5 text-[11px] font-semibold text-attention">{t.count}</span> : null}
+                {t.count ? <span className="rounded-sm bg-attention-50 px-1.5 text-[11px] font-semibold text-attention num">{t.count}</span> : null}
               </Link>
             </li>
           );

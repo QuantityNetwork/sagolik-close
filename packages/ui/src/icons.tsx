@@ -14,8 +14,8 @@ import { cn } from "./primitives";
 export type IconTone = "brand" | "light" | "mono";
 
 const TONES: Record<IconTone, CSSProperties> = {
-  brand: { "--i-from": "#032a52", "--i-to": "#0b6f80", "--i-accent": "#0a7c8c", "--i-knock": "#ffffff" } as CSSProperties,
-  light: { "--i-from": "#ffffff", "--i-to": "#cfe9ec", "--i-accent": "#6fc8cc", "--i-knock": "#032a52" } as CSSProperties,
+  brand: { "--i-from": "#0f2a47", "--i-to": "#1c4f6e", "--i-accent": "#127783", "--i-knock": "#ffffff" } as CSSProperties,
+  light: { "--i-from": "#ffffff", "--i-to": "#d8ebed", "--i-accent": "#7cc3c8", "--i-knock": "#0f2a47" } as CSSProperties,
   mono: { "--i-from": "currentColor", "--i-to": "currentColor", "--i-accent": "currentColor", "--i-knock": "var(--icon-knock, #ffffff)" } as CSSProperties,
 };
 
@@ -250,18 +250,12 @@ export function ProductIcon({ name, tone = "brand", size = 24, className, title 
   );
 }
 
-/** The soft white tile the icons sit on in marketing and empty states. */
+/** The paper tile the icons sit on in headers and empty states: hairline frame, no gloss. */
 export function IconTile({ name, size = "md", className }: { name: ProductIconName; size?: "sm" | "md" | "lg"; className?: string }) {
-  const box = { sm: "h-11 w-11 rounded-xl", md: "h-16 w-16 rounded-2xl", lg: "h-24 w-24 rounded-[22px]" }[size];
-  const glyph = { sm: 22, md: 32, lg: 48 }[size];
+  const box = { sm: "h-10 w-10", md: "h-14 w-14", lg: "h-20 w-20" }[size];
+  const glyph = { sm: 20, md: 28, lg: 40 }[size];
   return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center border border-white bg-gradient-to-b from-white to-[#f4f6f9] shadow-[0_1px_2px_rgb(3_42_82/0.06),0_8px_24px_-8px_rgb(3_42_82/0.18)]",
-        box,
-        className,
-      )}
-    >
+    <span className={cn("inline-flex shrink-0 items-center justify-center rounded-card border border-line bg-paper", box, className)}>
       <ProductIcon name={name} size={glyph} />
     </span>
   );

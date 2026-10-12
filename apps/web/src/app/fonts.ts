@@ -1,13 +1,16 @@
 import localFont from "next/font/local";
 
-/** Editorial serif for headlines and brand moments (self-hosted, no third-party requests). */
+/**
+ * Editorial serif for headlines, numerals and brand moments: Source Serif 4,
+ * variable weight with optical sizing, so large headlines get the finer
+ * display cut automatically. Self-hosted, no third-party requests.
+ */
 export const display = localFont({
   src: [
-    { path: "../../node_modules/@fontsource/dm-serif-display/files/dm-serif-display-latin-400-normal.woff2", weight: "400", style: "normal" },
-    { path: "../../node_modules/@fontsource/dm-serif-display/files/dm-serif-display-latin-ext-400-normal.woff2", weight: "400", style: "normal" },
-    { path: "../../node_modules/@fontsource/dm-serif-display/files/dm-serif-display-latin-400-italic.woff2", weight: "400", style: "italic" },
+    { path: "../../node_modules/@fontsource-variable/source-serif-4/files/source-serif-4-latin-opsz-normal.woff2", weight: "200 900", style: "normal" },
+    { path: "../../node_modules/@fontsource-variable/source-serif-4/files/source-serif-4-latin-opsz-italic.woff2", weight: "200 900", style: "italic" },
   ],
-  variable: "--font-dm-serif",
+  variable: "--font-serif",
   display: "swap",
   fallback: ["Georgia", "serif"],
 });

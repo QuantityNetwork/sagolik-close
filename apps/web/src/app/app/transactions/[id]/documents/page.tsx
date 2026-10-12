@@ -79,10 +79,10 @@ export default async function DocumentsPage({ params, searchParams }: { params: 
                       </SubmitButton>
                     </ActionForm>
                   ) : null}
-                  <a href={`/api/v1/documents/${d.id}/download?inline=1`} target="_blank" rel="noopener" className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] text-navy-800 ring-1 ring-inset ring-line-strong hover:bg-sand">
+                  <a href={`/api/v1/documents/${d.id}/download?inline=1`} target="_blank" rel="noopener" className="inline-flex h-8 items-center gap-1.5 rounded-control px-3 text-[13px] text-navy-800 ring-1 ring-inset ring-line-strong hover:bg-sand">
                     Preview
                   </a>
-                  <a href={`/api/v1/documents/${d.id}/download`} className="inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] text-navy-800 ring-1 ring-inset ring-line-strong hover:bg-sand" aria-label={`Download ${d.name}`}>
+                  <a href={`/api/v1/documents/${d.id}/download`} className="inline-flex h-8 items-center gap-1.5 rounded-control px-3 text-[13px] text-navy-800 ring-1 ring-inset ring-line-strong hover:bg-sand" aria-label={`Download ${d.name}`}>
                     <Download className="h-3.5 w-3.5" aria-hidden /> Download
                   </a>
                 </div>

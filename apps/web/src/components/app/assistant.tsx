@@ -79,7 +79,7 @@ export function Assistant({ transactionId, title }: { transactionId: string; tit
               setQuestion(s);
               void ask(s);
             }}
-            className="rounded-full border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:border-teal-600/40 hover:text-navy-800"
+            className="rounded-control border border-line px-2.5 py-1 text-[12px] text-ink-2 hover:border-teal-600/40 hover:text-navy-800"
           >
             {s}
           </button>

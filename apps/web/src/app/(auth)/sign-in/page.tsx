@@ -1,12 +1,14 @@
 import { safeRedirectPath } from "@sagolik/security";
 import { AUTOPILOT_PERSONA_KEYS, BUSINESS_PERSONA_KEYS, DEMO_PERSONAS, DEMO_PASSWORD, getRuntime } from "@sagolik/core";
-import { Alert, Card, CardBody, Field, Input, ParticipantAvatar } from "@sagolik/ui";
+import { Alert, Field, Input, ParticipantAvatar } from "@sagolik/ui";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { demoSignIn, magicLinkSignIn, oauthSignIn, passwordSignIn, signUp, ssoSignIn } from "@/app/actions/auth";
 import { Logo } from "@/components/brand";
 import { ActionForm, SubmitButton } from "@/components/forms";
+import { Guilloche } from "@/components/landing/exhibits";
+import { delay, stagger } from "@/lib/motion";
 import { getActor } from "@/lib/server/session";
 
 export const metadata: Metadata = { title: "Sign in" };
@@ -22,14 +24,45 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
   const creating = sp.mode === "create";
 
   return (
-    <div className="min-h-screen bg-canvas">
-      <header className="container-page flex h-20 items-center">
-        <Logo className="h-8 w-auto" />
-      </header>
-      <main id="main" className="container-page grid gap-10 pb-16 lg:grid-cols-[1fr_1.1fr]">
-        <section className="max-w-md">
-          <h1 className="text-[40px] leading-tight text-navy-800">{creating ? "Create your account" : sp.intent === "start" ? "Start your closing" : "Welcome back"}</h1>
-          <p className="mt-3 text-ink-2">
+    <div className="min-h-screen bg-canvas lg:grid lg:grid-cols-[minmax(380px,0.8fr)_1.2fr]">
+      <aside className="relative hidden overflow-hidden bg-navy-900 text-white lg:block">
+        <Guilloche id="g-signin" className="absolute inset-0 h-full w-full opacity-50" tone="light" lines={14} height={240} />
+        <div className="absolute inset-0 bg-gradient-to-b from-navy-900/70 via-navy-900/85 to-navy-950" />
+        <div className="sticky top-0 flex h-screen flex-col justify-between p-12">
+          <div className="relative">
+            <Logo variant="light" className="h-9 w-auto" />
+          </div>
+          <div className="relative">
+            <p className="kicker enter text-brass-300">Sagolik Close</p>
+            <p className="enter mt-6 font-display text-[44px] leading-[1.04] tracking-[-0.02em]" style={delay(80)}>
+              From decision
+              <br />
+              to <em className="italic text-brass-100">ownership.</em>
+            </p>
+            <ul className="mt-10 space-y-4 border-t border-white/15 pt-6 text-[14px] text-white/70">
+              {[
+                "We never ask for your banking password.",
+                "Payment details change only with a second person and a waiting period.",
+                "Funds stay with your licensed escrow or title partner.",
+              ].map((line, i) => (
+                <li key={line} className="enter flex gap-3" style={delay(250 + i * 90)}>
+                  <span className="font-display text-[13px] italic text-brass-300">{["i", "ii", "iii"][i]}.</span>
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <p className="relative text-[12px] text-white/40">© {new Date().getFullYear()} Sagolik</p>
+        </div>
+      </aside>
+      <main id="main" className="px-4 pt-8 pb-16 sm:px-10 lg:px-16 lg:pt-20">
+        <div className="lg:hidden">
+          <Logo className="h-8 w-auto" />
+        </div>
+        <section className="mt-10 max-w-md lg:mt-0">
+          <p className="kicker">{creating ? "New account" : "Secure sign-in"}</p>
+          <h1 className="mt-4 text-[42px] leading-[1.05] tracking-[-0.02em] text-navy-900">{creating ? "Create your account" : sp.intent === "start" ? "Start your closing" : "Welcome back"}</h1>
+          <p className="mt-4 text-[15.5px] leading-relaxed text-ink-2">
             {sp.intent === "start"
               ? "Sign in to open a transaction or join one you've been invited to. Buyers and sellers are usually invited by their agent or escrow officer."
               : "Sign in to see your closing, your documents and what needs you next."}
@@ -71,8 +104,8 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
                   </SubmitButton>
                 </ActionForm>
               )}
-              <details className="rounded-lg border border-line bg-paper px-4 py-3">
-                <summary className="cursor-pointer text-sm font-medium text-navy-800">Email me a sign-in link instead</summary>
+              <details className="smooth group rounded-card border border-line bg-paper px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium text-navy-800 marker:text-brass-600">Email me a sign-in link instead</summary>
                 <ActionForm action={magicLinkSignIn} className="mt-3 space-y-3">
                   <input type="hidden" name="next" value={next} />
                   <Field label="Email" htmlFor="ml-email">
@@ -95,8 +128,8 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
                   ))}
                 </div>
               ) : null}
-              <details className="rounded-lg border border-line bg-paper px-4 py-3">
-                <summary className="cursor-pointer text-sm font-medium text-navy-800">Sign in with your organization (SSO)</summary>
+              <details className="smooth group rounded-card border border-line bg-paper px-4 py-3">
+                <summary className="cursor-pointer text-sm font-medium text-navy-800 marker:text-brass-600">Sign in with your organization (SSO)</summary>
                 <ActionForm action={ssoSignIn} className="mt-3 space-y-3">
                   <Field label="Company email domain" htmlFor="domain">
                     <Input id="domain" name="domain" placeholder="example.com" required />
@@ -127,11 +160,9 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
         </section>
 
         {rt.env.demoMode ? (
-          <section aria-labelledby="personas-title">
-            <Card>
-              <CardBody className="p-6">
-                <p className="eyebrow">Demo</p>
-                <h2 id="personas-title" className="mt-1 text-2xl text-navy-800">
+          <section aria-labelledby="personas-title" className="mt-14 max-w-3xl border-t-2 border-navy-800 pt-6">
+                <p className="exhibit-label">Demo environment</p>
+                <h2 id="personas-title" className="mt-1 text-[28px] text-navy-900">
                   Explore as…
                 </h2>
                 <p className="mt-1 text-sm text-ink-3">Fictional people on fictional transactions. Nothing is sent or moved.</p>
@@ -140,23 +171,23 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
                   { key: "autopilot", label: "After closing: Property Autopilot", people: DEMO_PERSONAS.filter((p) => AUTOPILOT_PERSONA_KEYS.includes(p.key)) },
                   { key: "business", label: "Business acquisition (beta)", people: DEMO_PERSONAS.filter((p) => BUSINESS_PERSONA_KEYS.includes(p.key)) },
                 ].map((group) => (
-                  <div key={group.key} className="mt-5">
-                    <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-ink-3">{group.label}</p>
-                    <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {group.people.map((p) => (
-                    <li key={p.key}>
+                  <div key={group.key} className="mt-8">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.2em] text-brass-700">{group.label}</p>
+                    <ul data-reveal className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {group.people.map((p, i) => (
+                    <li key={p.key} className="follow" style={stagger(i)}>
                       <ActionForm action={demoSignIn}>
                         <input type="hidden" name="persona" value={p.key} />
                         <input type="hidden" name="next" value={next} />
                         <button
                           type="submit"
-                          className="flex w-full items-start gap-3 rounded-lg border border-line bg-paper p-3 text-left transition-colors hover:border-teal-600/40 hover:bg-teal-50/40 focus-visible:border-teal-600"
+                          className="group flex w-full items-start gap-3 rounded-card border border-line bg-paper p-3.5 text-left transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-navy-800/40 hover:shadow-[var(--shadow-float)] focus-visible:border-teal-600"
                           data-testid={`persona-${p.key}`}
                         >
                           <ParticipantAvatar name={p.name} size={36} />
                           <span className="min-w-0">
                             <span className="block text-sm font-semibold text-ink">{p.name}</span>
-                            <span className="block text-[12px] font-medium text-teal-700">{p.title}</span>
+                            <span className="block text-[11px] font-semibold uppercase tracking-[0.12em] text-teal-700">{p.title}</span>
                             <span className="mt-0.5 block text-[12px] leading-snug text-ink-3">{p.description}</span>
                           </span>
                         </button>
@@ -166,8 +197,6 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
                     </ul>
                   </div>
                 ))}
-              </CardBody>
-            </Card>
           </section>
         ) : null}
       </main>

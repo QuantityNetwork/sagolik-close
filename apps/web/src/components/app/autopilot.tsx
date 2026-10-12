@@ -25,15 +25,15 @@ const SEVERITY: Record<DecisionSeverity, { label: string; className: string }> =
 
 export function SeverityTag({ severity }: { severity: DecisionSeverity }) {
   const s = SEVERITY[severity];
-  return <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide", s.className)}>{s.label}</span>;
+  return <span className={cn("rounded-control px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide", s.className)}>{s.label}</span>;
 }
 
 /** A plain, factual metric: label, value, one line of context. */
 export function Metric({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: "attention" | "done" }) {
   return (
-    <div className="rounded-[var(--radius-card)] border border-line bg-paper px-5 py-4">
-      <p className="text-[12px] font-medium uppercase tracking-wide text-ink-3">{label}</p>
-      <p className={cn("num mt-1 text-[28px] leading-tight", tone === "attention" ? "text-[#8a5300]" : tone === "done" ? "text-success" : "text-navy-800")}>{value}</p>
+    <div className="rounded-card border border-line border-t-2 border-t-navy-800 bg-paper px-5 py-4">
+      <p className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-ink-3">{label}</p>
+      <p className={cn("num mt-2 font-display text-[32px] leading-tight", tone === "attention" ? "text-attention" : tone === "done" ? "text-success" : "text-navy-900")}>{value}</p>
       {sub ? <p className="mt-1 text-[12.5px] text-ink-3">{sub}</p> : null}
     </div>
   );
@@ -90,7 +90,7 @@ export function AttentionList({ items, showProperty = true, empty }: { items: At
 /** Always visible on Autopilot pages: what Sagolik does and doesn't do. */
 export function MonitoringNote() {
   return (
-    <p className="inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1 text-[12px] text-ink-3">
+    <p className="inline-flex items-center gap-2 rounded-control border border-line bg-paper px-3 py-1 text-[12px] text-ink-3">
       <span className="h-1.5 w-1.5 rounded-full bg-teal-500" aria-hidden />
       Monitoring only · Sagolik never pays bills or moves money
     </p>

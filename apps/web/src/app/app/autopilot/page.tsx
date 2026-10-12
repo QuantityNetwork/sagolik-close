@@ -114,7 +114,7 @@ export default async function AutopilotHome({ searchParams }: { searchParams: Pr
               action={
                 <nav aria-label="Filter" className="flex gap-1">
                   {FILTERS.map((f) => (
-                    <Link key={f.key} href={f.key === "all" ? "/app/autopilot" : `/app/autopilot?status=${f.key}`} aria-current={filter === f.key ? "page" : undefined} className={filter === f.key ? "rounded-full bg-navy-800 px-3 py-1 text-[12px] text-white" : "rounded-full px-3 py-1 text-[12px] text-ink-2 hover:bg-navy-50"}>
+                    <Link key={f.key} href={f.key === "all" ? "/app/autopilot" : `/app/autopilot?status=${f.key}`} aria-current={filter === f.key ? "page" : undefined} className={filter === f.key ? "rounded-control bg-navy-800 px-3 py-1 text-[12px] text-white" : "rounded-control px-3 py-1 text-[12px] text-ink-2 hover:bg-navy-50"}>
                       {f.label}
                     </Link>
                   ))}

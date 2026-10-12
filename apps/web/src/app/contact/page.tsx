@@ -23,20 +23,20 @@ export default async function ContactPage({ searchParams }: { searchParams: Prom
   return (
     <>
       <SiteHeader />
-      <main id="main" className="container-page grid gap-10 py-14 lg:grid-cols-[1fr_1.1fr]">
-        <div>
-          <p className="eyebrow">Contact</p>
-          <h1 className="mt-3 text-[40px] leading-tight text-navy-800">Let's talk about your closings.</h1>
-          <p className="mt-4 max-w-md text-[15px] text-ink-2">
+      <main id="main" className="container-page grid gap-14 py-16 lg:grid-cols-[0.9fr_1.1fr] lg:gap-20 lg:py-24">
+        <div className="animate-rise">
+          <p className="kicker">Contact</p>
+          <h1 className="mt-5 text-[44px] leading-[1.04] tracking-[-0.02em] text-navy-900 sm:text-[52px]">Let&apos;s talk about your closings.</h1>
+          <p className="mt-6 max-w-md text-[16px] leading-[1.7] text-ink-2">
             Tell us about your team or your purchase and a person — not a bot — will reply. For a data request (access, correction, deletion) signed-in users can also export their data directly from Settings → Privacy.
           </p>
-          <p className="mt-6 flex max-w-md items-start gap-2 rounded-lg border border-line bg-paper p-4 text-[13px] text-ink-3">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-teal-600" aria-hidden />
+          <p className="mt-8 flex max-w-md items-start gap-3 border-l-2 border-brass-500 py-1 pl-4 text-[13.5px] leading-relaxed text-ink-2">
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-brass-600" aria-hidden />
             We will never ask for passwords, one-time codes or bank details by email or phone. Wire instructions are only ever shown inside the verified Sagolik Close workspace.
           </p>
         </div>
-        <Card>
-          <CardBody className="p-6 sm:p-8">
+        <Card className="animate-rise border-t-2 border-t-navy-800 [animation-delay:120ms]">
+          <CardBody className="p-6 sm:p-10">
             <ActionForm action={contactAction} resetOnSuccess className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field label="Your name" htmlFor="name">

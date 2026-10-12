@@ -75,7 +75,7 @@ export default async function BillsPage({ params }: { params: Promise<{ id: stri
                       {b.status === "received" ? (
                         <>
                           <details className="group">
-                            <summary className="cursor-pointer list-none rounded-full border border-line px-3 py-1.5 text-[12.5px] text-ink-2 hover:bg-canvas [&::-webkit-details-marker]:hidden">Mark as paid</summary>
+                            <summary className="cursor-pointer list-none rounded-control border border-line px-3 py-1.5 text-[12.5px] text-ink-2 hover:bg-canvas [&::-webkit-details-marker]:hidden">Mark as paid</summary>
                             <ActionForm action={markBillPaidAction} className="mt-2 flex flex-wrap items-end gap-2">
                               <input type="hidden" name="billId" value={b.id} />
                               <Field label="Paid on" htmlFor={`paid-${b.id}`}>
@@ -108,7 +108,7 @@ export default async function BillsPage({ params }: { params: Promise<{ id: stri
                         </ActionButton>
                       ) : null}
                       {b.fileKey ? (
-                        <a href={`/api/v1/autopilot/bills/${b.id}/file`} className="rounded-full px-3 py-1.5 text-[12.5px] text-navy-800 underline">
+                        <a href={`/api/v1/autopilot/bills/${b.id}/file`} className="rounded-control px-3 py-1.5 text-[12.5px] text-navy-800 underline">
                           View document
                         </a>
                       ) : null}

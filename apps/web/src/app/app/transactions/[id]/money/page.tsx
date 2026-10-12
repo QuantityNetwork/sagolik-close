@@ -199,7 +199,7 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
                         </ActionButton>
                       ) : null}
                       {demo && p.externalPaymentId && ["initiated", "processing", "received"].includes(p.status) ? (
-                        <span className="flex items-center gap-1 rounded-full border border-dashed border-attention/40 px-2 py-0.5">
+                        <span className="flex items-center gap-1 rounded-control border border-dashed border-attention/40 px-2 py-0.5">
                           <span className="text-[11px] font-medium text-attention">Sandbox bank</span>
                           <ActionButton action={advancePaymentSandbox} fields={{ transactionId: id, paymentId: p.id, outcome: "next" }} variant="ghost">
                             Advance

@@ -47,7 +47,7 @@ export default async function HomeRecordPage({ params }: { params: Promise<{ id:
             <p className="eyebrow text-teal-700">Home Record</p>
             <h1 className="mt-2 text-[38px] leading-tight text-navy-800">{property?.addressLine1}</h1>
             <p className="text-ink-3">{[property?.city, property?.region, property?.postalCode].filter(Boolean).join(", ")}</p>
-            <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-success-50 px-3 py-1 text-sm font-medium text-success">
+            <p className="mt-4 inline-flex items-center gap-2 rounded-control bg-success-50 px-3 py-1 text-sm font-medium text-success">
               <BadgeCheck className="h-4 w-4" aria-hidden /> Ownership recorded {recording?.recordingReference ? `· ref ${recording.recordingReference}` : ""}
             </p>
             <DefinitionList

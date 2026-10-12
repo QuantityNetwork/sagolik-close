@@ -46,7 +46,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
             key={f.key}
             href={f.key === "all" ? "/app/transactions" : `/app/transactions?filter=${f.key}`}
             aria-current={filter === f.key ? "page" : undefined}
-            className={cn("rounded-full px-3 py-1.5 text-[13px] ring-1 ring-inset", filter === f.key ? "bg-navy-800 text-white ring-navy-800" : "bg-paper text-ink-2 ring-line-strong hover:bg-sand")}
+            className={cn("rounded-control px-3 py-1.5 text-[13px] ring-1 ring-inset", filter === f.key ? "bg-navy-800 text-white ring-navy-800" : "bg-paper text-ink-2 ring-line-strong hover:bg-sand")}
           >
             {f.label}
           </Link>

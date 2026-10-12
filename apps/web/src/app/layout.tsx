@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { connection } from "next/server";
+import { MotionRoot } from "@/components/motion";
 import { display, sans } from "./fonts";
 import "./globals.css";
 
@@ -22,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#032a52",
+  themeColor: "#0f2a47",
   width: "device-width",
   initialScale: 1,
 };
@@ -38,6 +39,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           Skip to content
         </a>
         {children}
+        <MotionRoot />
       </body>
     </html>
   );

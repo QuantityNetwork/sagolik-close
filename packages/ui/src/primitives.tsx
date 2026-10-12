@@ -2,6 +2,9 @@
  * Sagolik Close design system — accessible primitives.
  * Framework-agnostic React (no Next.js imports) so it can be reused by the
  * admin app, emails and future surfaces.
+ *
+ * Visual language: crisp 3–4px corners, hairline rules, navy ink on ivory and
+ * white paper, almost no shadow. Colour carries meaning (status), not decoration.
  */
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, LabelHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
@@ -15,22 +18,23 @@ export type ButtonVariant = "primary" | "secondary" | "teal" | "ghost" | "danger
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "bg-navy-800 text-white hover:bg-navy-700 active:bg-navy-900 shadow-sm",
-  secondary: "bg-paper text-navy-800 ring-1 ring-inset ring-line-strong hover:bg-sand hover:ring-navy-800/30",
-  teal: "bg-teal-600 text-white hover:bg-teal-700 shadow-sm",
+  primary: "bg-navy-800 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] hover:bg-navy-900 active:bg-navy-950",
+  secondary: "bg-paper/60 text-navy-800 ring-1 ring-inset ring-navy-800/25 hover:bg-paper hover:ring-navy-800/60",
+  teal: "bg-teal-700 text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] hover:bg-teal-800",
   ghost: "text-navy-800 hover:bg-navy-50",
-  danger: "bg-paper text-danger ring-1 ring-inset ring-danger/30 hover:bg-danger-50",
-  light: "bg-white/95 text-navy-800 hover:bg-white shadow-sm",
+  danger: "bg-paper text-danger ring-1 ring-inset ring-danger/35 hover:bg-danger-50",
+  light: "bg-white text-navy-900 hover:bg-brass-50",
 };
 const SIZES: Record<ButtonSize, string> = {
   sm: "h-8 px-3 text-[13px] gap-1.5",
-  md: "h-10 px-4 text-sm gap-2",
+  md: "h-10 px-4 text-[14px] gap-2",
   lg: "h-12 px-6 text-[15px] gap-2.5",
 };
 
 export function buttonClasses(variant: ButtonVariant = "primary", size: ButtonSize = "md", extra?: string) {
   return cn(
-    "inline-flex items-center justify-center rounded-full font-medium whitespace-nowrap transition-colors duration-150",
+    "btn inline-flex items-center justify-center rounded-control font-medium tracking-[0.01em] whitespace-nowrap",
+    "transition-[color,background-color,box-shadow] duration-200 ease-out",
     "disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",
     VARIANTS[variant],
     SIZES[size],
@@ -45,7 +49,7 @@ export function Button({ variant = "primary", size = "md", className, ...props }
 // ----------------------------------------------------------------------------- Card
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-[var(--radius-card)] border border-line bg-paper shadow-[var(--shadow-card)]", className)} {...props} />;
+  return <div className={cn("rounded-card border border-line bg-paper shadow-[var(--shadow-card)]", className)} {...props} />;
 }
 
 export function CardHeader({ title, description, action, className, eyebrow }: { title: ReactNode; description?: ReactNode; action?: ReactNode; className?: string; eyebrow?: ReactNode }) {
@@ -53,8 +57,8 @@ export function CardHeader({ title, description, action, className, eyebrow }: {
     <div className={cn("flex items-start justify-between gap-4 border-b border-line px-5 py-4", className)}>
       <div className="min-w-0">
         {eyebrow ? <p className="eyebrow mb-1">{eyebrow}</p> : null}
-        <h2 className="font-sans text-[15px] font-semibold text-ink">{title}</h2>
-        {description ? <p className="mt-0.5 text-[13px] text-ink-3">{description}</p> : null}
+        <h2 className="font-sans text-[14.5px] font-semibold tracking-[-0.005em] text-ink">{title}</h2>
+        {description ? <p className="mt-0.5 text-[13px] leading-snug text-ink-3">{description}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -70,13 +74,13 @@ export function CardBody({ className, ...props }: HTMLAttributes<HTMLDivElement>
 export type Tone = "neutral" | "progress" | "attention" | "blocked" | "done" | "info" | "stopped";
 
 const TONES: Record<Tone, string> = {
-  neutral: "bg-sand text-ink-2 ring-line-strong/60",
+  neutral: "bg-sand/70 text-ink-2 ring-line-strong/70",
   progress: "bg-navy-50 text-navy-700 ring-navy-100",
   attention: "bg-attention-50 text-attention ring-attention/20",
   blocked: "bg-danger-50 text-danger ring-danger/20",
   done: "bg-success-50 text-success ring-success/20",
   info: "bg-teal-50 text-teal-700 ring-teal-100",
-  stopped: "bg-sand text-ink-3 ring-line-strong/60",
+  stopped: "bg-sand/70 text-ink-3 ring-line-strong/70",
 };
 const DOTS: Record<Tone, string> = {
   neutral: "bg-ink-4",
@@ -90,7 +94,7 @@ const DOTS: Record<Tone, string> = {
 
 export function StatusBadge({ tone = "neutral", children, className, dot = true }: { tone?: Tone; children: ReactNode; className?: string; dot?: boolean }) {
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-medium ring-1 ring-inset", TONES[tone], className)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-sm px-2 py-[3px] text-[11.5px] font-medium leading-none ring-1 ring-inset", TONES[tone], className)}>
       {dot ? <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", DOTS[tone])} /> : null}
       {children}
     </span>
@@ -101,13 +105,13 @@ export function StatusBadge({ tone = "neutral", children, className, dot = true 
 
 export function Alert({ tone = "info", title, children, className, action }: { tone?: Exclude<Tone, "neutral" | "stopped" | "progress">; title?: ReactNode; children?: ReactNode; className?: string; action?: ReactNode }) {
   const styles = {
-    info: "border-teal-100 bg-teal-50 text-teal-800",
-    attention: "border-attention/20 bg-attention-50 text-[#6b4000]",
-    blocked: "border-danger/20 bg-danger-50 text-[#7a1810]",
-    done: "border-success/20 bg-success-50 text-[#14532f]",
+    info: "border-l-teal-600 bg-teal-50/60 text-teal-800",
+    attention: "border-l-attention bg-attention-50/70 text-[#5f3a00]",
+    blocked: "border-l-danger bg-danger-50/70 text-[#741a12]",
+    done: "border-l-success bg-success-50/70 text-[#134a2f]",
   }[tone];
   return (
-    <div role={tone === "blocked" ? "alert" : "status"} className={cn("flex items-start gap-3 rounded-lg border px-4 py-3 text-sm", styles, className)}>
+    <div role={tone === "blocked" ? "alert" : "status"} className={cn("flex items-start gap-3 rounded-sm border border-line border-l-[3px] px-4 py-3 text-sm", styles, className)}>
       <div className="min-w-0 flex-1">
         {title ? <p className="font-semibold">{title}</p> : null}
         {children ? <div className={cn(title ? "mt-0.5" : null, "opacity-90")}>{children}</div> : null}
@@ -120,11 +124,11 @@ export function Alert({ tone = "info", title, children, className, action }: { t
 // ----------------------------------------------------------------------------- Forms
 
 export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
-  return <label className={cn("block text-[13px] font-medium text-ink-2", className)} {...props} />;
+  return <label className={cn("block text-[12.5px] font-medium tracking-[0.01em] text-ink-2", className)} {...props} />;
 }
 
 const fieldBase =
-  "block w-full rounded-lg border border-line-strong bg-paper px-3 text-sm text-ink shadow-[inset_0_1px_0_rgb(0_0_0/0.02)] placeholder:text-ink-4 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-600/20 disabled:bg-sand disabled:text-ink-3 aria-[invalid=true]:border-danger";
+  "block w-full rounded-control border border-line-strong bg-paper px-3 text-sm text-ink transition-[border-color,box-shadow] duration-150 placeholder:text-ink-4 hover:border-ink-4 focus:border-navy-700 focus:outline-none focus:ring-[3px] focus:ring-navy-700/10 disabled:bg-sand disabled:text-ink-3 aria-[invalid=true]:border-danger";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(fieldBase, "h-10", className)} {...props} />;
@@ -166,10 +170,10 @@ export function Field({ label, htmlFor, hint, error, children, className }: { la
 export function EmptyState({ title, children, action, icon }: { title: ReactNode; children?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      {icon ? <div className="mb-3 text-ink-4">{icon}</div> : null}
-      <p className="font-medium text-ink">{title}</p>
-      {children ? <p className="mt-1 max-w-md text-sm text-ink-3">{children}</p> : null}
-      {action ? <div className="mt-4">{action}</div> : null}
+      {icon ? <div className="mb-4 text-ink-4">{icon}</div> : null}
+      <p className="font-display text-[19px] text-navy-800">{title}</p>
+      {children ? <p className="mt-1.5 max-w-md text-sm leading-relaxed text-ink-3">{children}</p> : null}
+      {action ? <div className="mt-5">{action}</div> : null}
     </div>
   );
 }
@@ -179,7 +183,7 @@ export function Divider({ className }: { className?: string }) {
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cn("animate-pulse rounded-md bg-sand", className)} />;
+  return <div aria-hidden className={cn("animate-pulse rounded-sm bg-sand", className)} />;
 }
 
 export function DefinitionList({ items, className }: { items: Array<{ term: ReactNode; value: ReactNode }>; className?: string }) {
@@ -205,7 +209,7 @@ export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>)
   );
 }
 export function Th({ className, ...props }: HTMLAttributes<HTMLTableCellElement>) {
-  return <th scope="col" className={cn("border-b border-line bg-canvas px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink-3", className)} {...props} />;
+  return <th scope="col" className={cn("border-b border-navy-800/70 px-4 py-2.5 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-3", className)} {...props} />;
 }
 export function Td({ className, ...props }: HTMLAttributes<HTMLTableCellElement>) {
   return <td className={cn("border-b border-line px-4 py-3 align-middle", className)} {...props} />;
@@ -219,7 +223,7 @@ export function Hint({ label, children }: { label: string; children: ReactNode }
       {children}
       <span
         role="tooltip"
-        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max max-w-64 -translate-x-1/2 rounded-md bg-navy-900 px-2.5 py-1.5 text-[12px] leading-snug text-white opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus:opacity-100"
+        className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 w-max max-w-64 -translate-x-1/2 translate-y-1 rounded-sm bg-navy-900 px-2.5 py-1.5 text-[12px] leading-snug text-white opacity-0 shadow-lg transition-[opacity,transform] duration-200 group-hover:translate-y-0 group-hover:opacity-100 group-focus:translate-y-0 group-focus:opacity-100"
       >
         {label}
       </span>

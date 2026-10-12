@@ -100,6 +100,7 @@ docs/             Architecture, data model, security, threat model, integrations
 - [Money service (Go) — design](docs/money-service.md)
 - [Property Autopilot](docs/autopilot.md)
 - [Compliance boundaries](docs/compliance-boundaries.md)
+- [Design system](docs/design-system.md)
 - [Deployment](docs/deployment.md)
 
 ## Status
