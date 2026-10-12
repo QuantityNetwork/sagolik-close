@@ -3,6 +3,8 @@
  * Sagolik tracks instructions, conditions, deposits and disbursement status.
  */
 import { assertCan, assertStepUp } from "@sagolik/auth";
+import type { TransactionSnapshot } from "@sagolik/workflow";
+import type { Hex } from "viem";
 import { z } from "zod";
 import { type ServiceContext, requireUser } from "../context";
 import { badRequest, conflict, notFound } from "../errors";
@@ -144,7 +146,46 @@ const MovementInput = z.object({
   kind: z.enum(["receipt", "disbursement"]),
   amount: z.number().int().positive(),
   reference: z.string().trim().regex(/^[\p{L}\p{N} .,:#/_-]{3,120}$/u, "Add the reference from your escrow system."),
+  /** USD closings: the Base transaction a payer sent USDC in, read as evidence for this receipt. */
+  chainTxHash: z
+    .string()
+    .trim()
+    .regex(/^0x[0-9a-fA-F]{64}$/, "Paste the whole transaction hash: 0x followed by 64 letters and numbers.")
+    .optional(),
 });
+
+const usd = (cents: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+
+/**
+ * Evidence for USDC sent on Base directly from the payer's own wallet. Sagolik
+ * only reads the transaction (it never sends, holds or receives the money),
+ * and escrow still decides what it received.
+ */
+async function paymentEvidence(ctx: ServiceContext, s: TransactionSnapshot, kind: string, amount: number, txHash: Hex) {
+  if (kind !== "receipt") throw badRequest("A Base transaction can only back funds received.");
+  if (s.transaction.currency !== "USD") throw badRequest("USDC evidence applies to closings in US dollars.");
+  const chain = ctx.providers.chain;
+  if (!chain) throw badRequest("On-chain payment evidence isn't available right now.");
+  const hash = txHash.toLowerCase() as Hex;
+  const earlier = await ctx.writer.chain_records.find({ transactionId: s.transaction.id, kind: "funds.received" });
+  if (earlier.some((r) => (r.receipt as { facts?: Record<string, unknown> }).facts?.evidenceTxHash === hash)) throw conflict("That transaction already backs funds recorded for this closing.");
+  const t = await chain.usdcTransfersIn(hash);
+  if (t.status === "pending") throw conflict(`That transaction isn't confirmed on ${chain.info.networkLabel} yet. Try again in a minute.`);
+  if (t.status === "failed") throw badRequest("That transaction failed, so it moved no USDC.");
+  const match = t.transfers.find((x) => x.cents === amount);
+  if (!match) {
+    throw badRequest(t.transfers.length ? `That transaction moved ${t.transfers.map((x) => usd(x.cents)).join(" and ")} in USDC, not ${usd(amount)}.` : "That transaction didn't move any USDC.");
+  }
+  const fromVerifiedWallet = !!(await ctx.writer.wallet_connections.findOne({ transactionId: s.transaction.id, status: "verified", network: chain.info.network, address: match.from }));
+  return {
+    evidenceNetwork: chain.info.network,
+    evidenceTxHash: hash,
+    evidenceUsdcCents: match.cents,
+    evidenceTo: match.to,
+    evidenceFromVerifiedWallet: fromVerifiedWallet,
+    evidenceBlock: t.blockNumber ?? null,
+  };
+}
 
 /**
  * The escrow officer records what their escrow system shows — funds received
@@ -166,6 +207,7 @@ export async function recordEscrowMovement(ctx: ServiceContext, transactionId: s
   if (input.kind === "disbursement" && input.amount > escrow.receivedAmount) {
     throw conflict("That payout is larger than the funds escrow has reported holding.");
   }
+  const evidence = input.chainTxHash ? await paymentEvidence(ctx, s, input.kind, input.amount, input.chainTxHash as Hex) : null;
   if (ctx.money) {
     await viaMoney(() =>
       ctx.money!.recordMovement(moneyCaller(ctx, s, "escrow.manage"), {
@@ -187,7 +229,7 @@ export async function recordEscrowMovement(ctx: ServiceContext, transactionId: s
     currency: escrow.currency,
     status: "settled",
     paymentId: null,
-    description: input.kind === "receipt" ? "Funds received (recorded by escrow)" : "Funds paid out (recorded by escrow)",
+    description: input.kind === "receipt" ? `Funds received (recorded by escrow)${evidence ? ` · USDC on ${ctx.providers.chain?.info.networkLabel ?? "Base"}` : ""}` : "Funds paid out (recorded by escrow)",
     externalReference,
     occurredAt: now,
     createdAt: now,
@@ -203,10 +245,17 @@ export async function recordEscrowMovement(ctx: ServiceContext, transactionId: s
     resourceId: escrow.id,
     transactionId,
     organizationId: s.transaction.organizationId,
-    metadata: { kind: input.kind, amount: input.amount, currency: escrow.currency, reference: input.reference },
+    metadata: { kind: input.kind, amount: input.amount, currency: escrow.currency, reference: input.reference, ...(evidence ? { chainTxHash: evidence.evidenceTxHash } : {}) },
   });
   if (input.kind === "receipt") {
-    await emit(ctx, { type: "escrow.deposit_received", aggregateType: "escrow_account", aggregateId: escrow.id, transactionId, payload: { amount: input.amount }, idempotencyKey: `escrow.deposit_received:${escrow.id}:${input.reference}` });
+    await emit(ctx, {
+      type: "escrow.deposit_received",
+      aggregateType: "escrow_account",
+      aggregateId: escrow.id,
+      transactionId,
+      payload: { amount: input.amount, source: "escrow_report", ...(evidence ?? {}) },
+      idempotencyKey: `escrow.deposit_received:${escrow.id}:${input.reference}`,
+    });
     await postSystemMessage(ctx, transactionId, `Escrow recorded funds received (ref ${input.reference}).`, { type: "escrow_account", id: escrow.id });
   }
   await reconcile(ctx, transactionId);

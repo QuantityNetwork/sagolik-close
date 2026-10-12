@@ -85,6 +85,13 @@ export const AUDIT_ACTIONS = [
   "autopilot.bill_paid_verified",
   "autopilot.obligation_suggested",
   "autopilot.lender_data_applied",
+  "wallet.connected",
+  "wallet.funds_checked",
+  "wallet.removed",
+  "chain.record_confirmed",
+  "chain.record_failed",
+  "chain.record_verified",
+  "chain.receipts_exported",
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
@@ -107,6 +114,7 @@ export const DOMAIN_EVENT_TYPES = [
   "recording.submitted",
   "ownership.transferred",
   "message.posted",
+  "bank_instruction.verified",
 ] as const;
 export type DomainEventType = (typeof DOMAIN_EVENT_TYPES)[number];
 

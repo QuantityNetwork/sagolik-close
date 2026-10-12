@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildTimeline, dealSubject } from "@sagolik/workflow";
-import { askAssistant, DEMO_BUSINESS_TRANSACTION_ID, DEMO_TRANSACTION_ID, getTransaction, loadSnapshot, reconcile, transactionView, commandCenter, listDocuments, openDocument } from "./index";
+import { askAssistant, DEMO_BUSINESS_TRANSACTION_ID, DEMO_TRANSACTION_ID, getTransaction, loadSnapshot, reconcile, transactionView, commandCenter, listDocuments, openDocument, dealRecordView, verifyDealRecord } from "./index";
 import { createTestHarness } from "./testing";
 
 describe("demo environment", () => {
@@ -24,6 +24,14 @@ describe("demo environment", () => {
     expect(view.documents.needsAttention).toBe(2);
     const answer = await askAssistant(olivia, DEMO_TRANSACTION_ID, "What is holding up my closing?");
     expect(answer.bullets.join(" ")).toMatch(/Clear to Close|funded|signature/i);
+  });
+
+  it("includes a deal record for Maple Ridge that verifies against the sandbox chain", async () => {
+    const h = await createTestHarness({ seed: true });
+    const view = await dealRecordView(await h.as("marcus.lee"), DEMO_TRANSACTION_ID);
+    expect(view.entries).toHaveLength(11);
+    expect(view.entries.every((e) => e.status === "confirmed")).toBe(true);
+    expect(await verifyDealRecord(await h.as("olivia.carter"), DEMO_TRANSACTION_ID)).toMatchObject({ status: "match", entries: 11, onChainEntries: 11 });
   });
 
   it("enforces document classification in the demo vault", async () => {

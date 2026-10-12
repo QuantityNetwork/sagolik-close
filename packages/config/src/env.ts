@@ -67,6 +67,23 @@ const EnvSchema = z.object({
   MONEY_ASSERTION_SIGNING_JWK_FILE: optional,
   MONEY_ASSERTION_KID: z.string().default("web-1"),
 
+  /**
+   * On-chain deal record and wallet proof of funds (record and verify only —
+   * nothing here moves money). "sandbox" is the in-memory demo chain; "off"
+   * hides the features. Default: sandbox in demo mode, otherwise off.
+   */
+  CHAIN_NETWORK: z.enum(["off", "sandbox", "base", "base-sepolia", "local"]).optional(),
+  /** JSON-RPC endpoint. Defaults to the public Base endpoints (rate-limited; use a provider in production). */
+  CHAIN_RPC_URL: optional,
+  /** Deployed SagolikDealRegistry address. */
+  CHAIN_REGISTRY_ADDRESS: optional,
+  /** Private key of the recording account (RECORDER_ROLE only: it can append records, never move money). */
+  CHAIN_RECORDER_KEY: optional,
+  /** Secret that makes on-chain deal ids unlinkable to transactions (≥32 characters). */
+  CHAIN_DEAL_SALT: optional,
+  /** Local test networks only: the token to read as USDC. */
+  CHAIN_USDC_ADDRESS: optional,
+
   /** Shared secret used by the built-in mock providers to sign their webhooks. */
   MOCK_WEBHOOK_SECRET: z.string().default("mock_webhook_secret_local_only"),
   /** Public demo deployments: rebuild the in-memory demo every N hours so visitors start fresh (0 = never). */
@@ -78,10 +95,14 @@ const EnvSchema = z.object({
     .transform((v) => v === "true"),
 });
 
+export type ChainNetwork = "off" | "sandbox" | "base" | "base-sepolia" | "local";
+
 export type Env = z.infer<typeof EnvSchema> & {
   /** Supabase is configured → real auth + Postgres. Otherwise the in-memory demo store is used. */
   supabaseConfigured: boolean;
   demoMode: boolean;
+  /** Resolved CHAIN_NETWORK. */
+  chainNetwork: ChainNetwork;
 };
 
 export class EnvError extends Error {}
@@ -114,7 +135,25 @@ export function parseEnv(source: Record<string, string | undefined> = process.en
     if (!env.DATA_ENCRYPTION_KEYS) throw new EnvError("DATA_ENCRYPTION_KEYS is required in production.");
     if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) throw new EnvError("SESSION_SECRET (≥32 chars) is required in production.");
   }
-  return { ...env, supabaseConfigured, demoMode };
+  const chainNetwork: ChainNetwork = env.CHAIN_NETWORK ?? (demoMode ? "sandbox" : "off");
+  checkChain(env, chainNetwork);
+  return { ...env, supabaseConfigured, demoMode, chainNetwork };
+}
+
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+const PRIVATE_KEY = /^0x[0-9a-fA-F]{64}$/;
+
+function checkChain(env: z.infer<typeof EnvSchema>, network: ChainNetwork) {
+  if (env.APP_ENV === "production" && network !== "off" && network !== "base") {
+    throw new EnvError(`CHAIN_NETWORK must be base or off in production (got ${network}): sandbox and test networks aren't a public record.`);
+  }
+  if (env.CHAIN_USDC_ADDRESS && network !== "local") throw new EnvError("CHAIN_USDC_ADDRESS is only for local test networks; Base uses Circle's USDC.");
+  if (network === "off" || network === "sandbox") return;
+  if (!env.CHAIN_REGISTRY_ADDRESS || !ADDRESS.test(env.CHAIN_REGISTRY_ADDRESS)) throw new EnvError(`CHAIN_REGISTRY_ADDRESS (0x…, 40 hex characters) is required when CHAIN_NETWORK=${network}.`);
+  if (!env.CHAIN_DEAL_SALT || env.CHAIN_DEAL_SALT.length < 32) throw new EnvError(`CHAIN_DEAL_SALT (≥32 characters) is required when CHAIN_NETWORK=${network}.`);
+  if (env.CHAIN_RECORDER_KEY && !PRIVATE_KEY.test(env.CHAIN_RECORDER_KEY)) throw new EnvError("CHAIN_RECORDER_KEY must be a 0x-prefixed 32-byte hex private key.");
+  if (network === "local" && (!env.CHAIN_RPC_URL || !env.CHAIN_USDC_ADDRESS)) throw new EnvError("CHAIN_NETWORK=local needs CHAIN_RPC_URL and CHAIN_USDC_ADDRESS.");
+  if (env.CHAIN_RPC_URL && env.APP_ENV !== "local" && !env.CHAIN_RPC_URL.startsWith("https://")) throw new EnvError("CHAIN_RPC_URL must be https outside local development.");
 }
 
 let cached: Env | undefined;

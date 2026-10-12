@@ -69,6 +69,24 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report
 
+  contracts:
+    # The deal registry (Solidity), then the Base adapter against a local node running it.
+    runs-on: ubuntu-24.04
+    env:
+      CI_REQUIRE_CHAIN_IT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @sagolik/contracts build
+      # Includes the check that the ABI and bytecode the app uses match what was compiled here.
+      - run: pnpm --filter @sagolik/contracts test
+      - run: bash packages/contracts/scripts/integration.sh
+
   money-service:
     runs-on: ubuntu-24.04
     defaults:

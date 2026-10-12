@@ -1,3 +1,4 @@
+import { dealRecordEnabled } from "@sagolik/core";
 import { formatDate } from "@sagolik/i18n";
 import { IconTile, StatusBadge } from "@sagolik/ui";
 import { dealSubject, getJurisdiction } from "@sagolik/workflow";
@@ -11,7 +12,7 @@ const TONE = { neutral: "neutral", progress: "progress", attention: "attention",
 
 export default async function TransactionLayout({ children, params }: { children: React.ReactNode; params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { snapshot: s, view, can, locale } = await loadTx(id);
+  const { ctx, snapshot: s, view, can, locale } = await loadTx(id);
   const base = `/app/transactions/${id}`;
   const openTasks = view.myTasks.length;
   const subject = dealSubject(s);
@@ -30,6 +31,7 @@ export default async function TransactionLayout({ children, params }: { children
     { href: `${base}/calendar`, label: "Calendar", icon: "timeline" as const },
     ...(can("compliance.review") ? [{ href: `${base}/compliance`, label: "Compliance", count: complianceOpen, icon: "identity" as const }] : []),
     { href: `${base}/closing`, label: "Closing", icon: "ownership" as const },
+    ...(dealRecordEnabled(ctx) ? [{ href: `${base}/record`, label: "Record", icon: "signatures" as const }] : []),
     ...(can("audit.view") ? [{ href: `${base}/audit`, label: "Audit", icon: "integrations" as const }] : []),
   ];
 

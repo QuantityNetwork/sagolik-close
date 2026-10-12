@@ -40,6 +40,9 @@ import {
   uploadDocument,
   verifyBankInstruction,
   exportAuditPackage,
+  dealRecordView,
+  exportDealRecord,
+  verifyDealRecord,
   type AppError,
   toAppError,
 } from "./index";
@@ -367,6 +370,31 @@ describe("closing lifecycle (in-memory, sandbox providers)", () => {
     const pkg = await exportAuditPackage(await h.as("sofia.alvarez", { stepUp: true }), txId);
     expect(pkg.json).not.toContain("encryptedAccountNumber");
     expect(pkg.sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("anchors the closing's key facts in the deal record, without personal data", async () => {
+    const sofia = await h.as("sofia.alvarez");
+    const view = await dealRecordView(await h.as("marcus.lee"), txId);
+    expect(view.enabled).toBe(true);
+    expect(view.entries.every((e) => e.status === "confirmed")).toBe(true);
+    const kinds = new Set(view.entries.map((e) => e.kind));
+    for (const k of ["deal.opened", "milestone.completed", "document.version", "instruction.verified", "funds.received", "ownership.transferred"]) expect(kinds, k).toContain(k);
+    expect(view.entries.filter((e) => e.kind === "milestone.completed").map((e) => e.facts.to)).toContain("closed");
+    const signed = view.entries.find((e) => e.kind === "document.version" && e.facts.category === "purchase_agreement")!;
+    expect(signed.facts).toMatchObject({ signed: true, version: 2 });
+    expect(signed.facts.sha256).toMatch(/^[0-9a-f]{64}$/);
+
+    // Receipts hold facts, never the people involved.
+    const all = JSON.stringify(await h.db.chain_records.find({ transactionId: txId }));
+    for (const personal of ["Olivia", "Carter", "Daniel", "Brooks", "@demo.sagolik.test", "Test Hollow"]) expect(all).not.toContain(personal);
+
+    // Our receipts replay to exactly what the registry holds.
+    expect(await verifyDealRecord(sofia, txId)).toMatchObject({ status: "match", problems: [] });
+    const exported = await exportDealRecord(await h.as("marcus.lee"), txId);
+    expect(exported.entries.map((e) => e.sequence)).toEqual(exported.entries.map((_, i) => i + 1));
+
+    // Outsiders see nothing.
+    await expectAppError(dealRecordView(await h.as("mia.rodriguez"), txId), "not_found");
   });
 
   it("answers from structured data and declines regulated actions", async () => {

@@ -28,7 +28,8 @@ await runLoop(makeContext, {
   intervalMs,
   signal: controller.signal,
   onTick: (r) => {
-    if (r.webhooksRetried || Object.values(r.events).some((n) => n > 0)) log("info", "tick", { ...r });
+    const records = r.dealRecords.submitted + r.dealRecords.confirmed + r.dealRecords.failed;
+    if (r.webhooksRetried || records || Object.values(r.events).some((n) => n > 0)) log("info", "tick", { ...r });
   },
   onError: (e) => log("error", "tick failed", { error: e instanceof Error ? e.message : String(e) }),
 });

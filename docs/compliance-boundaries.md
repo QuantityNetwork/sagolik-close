@@ -12,6 +12,9 @@ Sagolik Close is software that coordinates regulated parties. This page records 
 | Title & recording | Ownership is transferred only on a registry or recording office confirmation reference. | `confirmRecording`; `transactions_state_guard` |
 | Advice | No legal, tax, lending or investment advice. The assistant explains status and points to the responsible professional. | `services/assistant.ts` |
 | Credit decisions | None. Mortgage status is entered by the lender, or reported by a lender integration. | `mortgage.update` is limited to lender roles |
+| Wallets | Never holds keys, asks for a recovery phrase, requests spending approval, or moves money to or from a wallet. A signed message proves control; the balance is read, never used. | `services/wallets.ts`; `wallet_connections` is owner-only; escrow sees `funds_checks` results, not balances |
+| Crypto payments | Never initiates, routes or receives them. A USDC transaction a payer sent directly is read as evidence; escrow still records what it received. | `paymentEvidence` in `services/escrow.ts` |
+| On-chain record | No personal data and no funds on chain. The registry has no payable functions; the recording account can only append fingerprints. | `packages/contracts`, `services/deal-record.ts`, `chain_records_guard`; see [onchain.md](onchain.md) |
 | Data | Minimisation, masking, encryption, export, and retention per jurisdiction. | See [security.md](security.md) |
 
 ## Jurisdictions

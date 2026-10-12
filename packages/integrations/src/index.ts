@@ -12,4 +12,5 @@ export * from "./mortgage";
 export * from "./title";
 export * from "./insurance";
 export * from "./notifications";
+export * from "./chain";
 export * from "./registry";

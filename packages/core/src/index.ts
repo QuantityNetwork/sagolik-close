@@ -15,6 +15,8 @@ export * from "./services/extraction";
 export * from "./services/signatures";
 export * from "./services/identity";
 export * from "./services/banking";
+export * from "./services/wallets";
+export * from "./services/deal-record";
 export * from "./services/autopilot";
 export * from "./services/bank-activity";
 export * from "./memberships";

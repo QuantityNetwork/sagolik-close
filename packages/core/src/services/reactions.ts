@@ -2,10 +2,12 @@
  * Domain-event reactions. Registered once at startup (web + worker).
  * Handlers must be idempotent — the outbox may deliver more than once.
  */
+import { globalSingleton } from "@sagolik/integrations";
 import type { TransactionState } from "@sagolik/types";
 import { onDomainEvent } from "../events";
 import { prepareFromOwnershipRecord } from "./autopilot";
 import { createOwnershipRecord } from "./closing";
+import { recordDealOpened, recordFundsReceived, recordMilestone, recordOwnershipTransferred, recordSignedDocument, recordVerifiedInstruction } from "./deal-record";
 import { notify, participantUserIds } from "./notifications";
 
 const PEOPLE_UPDATES: Partial<Record<TransactionState, string>> = {
@@ -21,11 +23,11 @@ const PEOPLE_UPDATES: Partial<Record<TransactionState, string>> = {
   disputed: "This transaction has been paused because of a dispute.",
 };
 
-let registered = false;
-
 export function registerReactions() {
-  if (registered) return;
-  registered = true;
+  // Once per process, however many copies of this module are loaded (the handler registry is process-wide too).
+  const state = globalSingleton("reactions_registered", () => ({ done: false }));
+  if (state.done) return;
+  state.done = true;
 
   onDomainEvent("transaction.state_changed", async (ctx, e) => {
     const to = e.payload.to as TransactionState;
@@ -49,6 +51,7 @@ export function registerReactions() {
 
   onDomainEvent("ownership.transferred", async (ctx, e) => {
     if (!e.transactionId) return;
+    await recordOwnershipTransferred(ctx, e);
     const record = await createOwnershipRecord(ctx, e.transactionId);
     // Close → Live: the property moves straight into monitoring (no money is ever moved).
     await prepareFromOwnershipRecord(ctx, record.id);
@@ -66,6 +69,13 @@ export function registerReactions() {
       linkPath: `/app/transactions/${e.transactionId}/messages`,
     });
   });
+
+  // The deal record on Base (record and verify only; these never throw).
+  onDomainEvent("transaction.created", recordDealOpened);
+  onDomainEvent("transaction.state_changed", recordMilestone);
+  onDomainEvent("document.signed", recordSignedDocument);
+  onDomainEvent("bank_instruction.verified", recordVerifiedInstruction);
+  onDomainEvent("escrow.deposit_received", recordFundsReceived);
 
   onDomainEvent("escrow.deposit_received", async (ctx, e) => {
     if (!e.transactionId) return;

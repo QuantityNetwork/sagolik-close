@@ -24,6 +24,10 @@ Sign in at `/sign-in` and pick a persona. For example, **Olivia Carter** (buyer)
 
 When a closing completes, the property moves into Property Autopilot: Sagolik keeps its operating record (mortgage, taxes, insurance, HOA, utilities), forecasts what's due, checks paying accounts, flags unusual or duplicate bills and escrow conflicts, and shows whether each property is covered. It never pays bills or moves money. Sign in as **Alex Morgan** for a fictional five-property portfolio. See [docs/autopilot.md](docs/autopilot.md).
 
+## Deal record and wallet proof of funds (Base)
+
+Key facts of each closing (milestones, signed documents, verified payment instructions, funds received by escrow, ownership transferred) are fingerprinted on Base through the `SagolikDealRegistry` contract. Receipts stay private to the people on the closing, who can check them against the public chain without trusting Sagolik. Buyers can prove funds held as USDC by signing a message with their own wallet. Escrow sees the result, never the balance. Nothing on chain holds or moves money, and no personal data goes there. In the demo, sign in as **Olivia Carter** and use the demo wallet on the Money tab, then open the Record tab. See [docs/onchain.md](docs/onchain.md).
+
 ## Business acquisitions (beta)
 
 The same closing workflow can run a purchase of a company (US asset or equity deals). It has its own vocabulary, milestones (LOI signed → ownership transferred), documents (LOI, diligence report, disclosure schedules, lien search, funds-flow memo) and roles (M&A advisor, counsel, accountant). The rules match real estate: funds stay with a licensed escrow agent, and ownership is marked transferred only when counsel confirms the closing filings. See [docs/business-beta.md](docs/business-beta.md) and the public page at `/business`.
@@ -99,6 +103,7 @@ docs/             Architecture, data model, security, threat model, integrations
 - [Integrations](docs/integrations.md) and [provider adapters](docs/provider-adapters.md)
 - [Money service (Go) — design](docs/money-service.md)
 - [Property Autopilot](docs/autopilot.md)
+- [Deal record and wallet proof of funds (Base)](docs/onchain.md)
 - [Compliance boundaries](docs/compliance-boundaries.md)
 - [Design system](docs/design-system.md)
 - [Deployment](docs/deployment.md)

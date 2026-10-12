@@ -20,7 +20,8 @@
     "@sagolik/security": "workspace:*",
     "@sagolik/types": "workspace:*",
     "@sagolik/workflow": "workspace:*",
-    "zod": "^4.3.0",
-    "@supabase/supabase-js": "^2.117.0"
+    "@supabase/supabase-js": "^2.117.0",
+    "viem": "^2.57.4",
+    "zod": "^4.3.0"
   }
 }

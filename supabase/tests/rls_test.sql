@@ -216,6 +216,99 @@ do $$ begin
 end $$;
 rollback;
 
+-- ----------------------------------------------------------------------------- wallets and the deal record (record and verify only)
+begin;
+-- A wallet and a proof-of-funds result for Olivia, written as the server would.
+set local role service_role;
+insert into public.wallet_connections (user_id, transaction_id, network, chain_id, address, challenge_nonce, status, verified_at, usdc_balance, balance_block, balance_as_of)
+  values (:'olivia', :'maple', 'sandbox', 31337, '0x1111111111111111111111111111111111111111', 'rls-test-nonce-0001', 'verified', now(), 25000000, '1', now());
+insert into public.funds_checks (transaction_id, user_id, source, source_id, source_label, ownership_proven, required_amount, currency, sufficient, checked_at)
+  select :'maple', :'olivia', 'wallet', id, 'USDC wallet on Sandbox chain (demo) •••• 1111', true, 20000000, 'USD', true, now()
+  from public.wallet_connections where challenge_nonce = 'rls-test-nonce-0001';
+reset role;
+select pg_temp.login('olivia.carter@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.wallet_connections), 1, 'the buyer sees her own wallet');
+select pg_temp.eq((select count(*) from public.funds_checks), 1, 'and her own proof-of-funds result');
+select pg_temp.eq((select count(*) from public.chain_records where transaction_id = :'maple'), 11, 'the buyer sees the whole deal record');
+do $$ begin
+  begin
+    update public.chain_records set status = 'failed';
+    raise exception 'FAIL: a client changed the deal record';
+  exception when insufficient_privilege then raise notice 'ok: clients cannot write the deal record';
+  end;
+end $$;
+do $$ begin
+  begin
+    insert into public.wallet_connections (user_id, transaction_id, network, chain_id, address, challenge_nonce, status, verified_at)
+      values (auth.uid(), (select id from public.transactions limit 1), 'sandbox', 31337, '0x2222222222222222222222222222222222222222', 'forged-nonce-00001', 'verified', now());
+    raise exception 'FAIL: a client claimed a wallet without a signature';
+  exception when insufficient_privilege then raise notice 'ok: wallets are only added after a server-checked signature';
+  end;
+end $$;
+reset role;
+select pg_temp.login('marcus.lee@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.wallet_connections), 0, 'escrow never sees the buyer''s wallet or balance');
+select pg_temp.eq((select count(*) from public.funds_checks where transaction_id = :'maple'), 1, 'escrow sees the proof-of-funds result');
+reset role;
+select pg_temp.login('jessica.morgan@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.funds_checks), 0, 'an agent sees no proof-of-funds results');
+select pg_temp.eq((select count(*) from public.chain_records where transaction_id = :'maple'), 9, 'an agent sees the deal record without its money facts');
+reset role;
+select pg_temp.login('daniel.brooks@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.wallet_connections) + (select count(*) from public.funds_checks), 0, 'the seller sees neither the buyer''s wallet nor her results');
+reset role;
+select pg_temp.login('mia.rodriguez@demo.sagolik.test');
+set local role authenticated;
+select pg_temp.eq((select count(*) from public.chain_records where transaction_id = :'maple'), 0, 'IDOR: outsiders see no deal record');
+rollback;
+
+-- What a deal record entry commits to never changes, even for the service role.
+begin;
+set local role service_role;
+do $$ begin
+  begin
+    update public.chain_records set receipt = '{}'::jsonb;
+    raise exception 'FAIL: a receipt was rewritten';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+    raise notice 'ok: receipts are immutable';
+  end;
+end $$;
+do $$ begin
+  begin
+    update public.chain_records set head = '0x' || repeat('0', 64) where status = 'confirmed';
+    raise exception 'FAIL: a confirmed entry was changed';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+    raise notice 'ok: confirmed entries are final';
+  end;
+end $$;
+do $$ begin
+  begin
+    delete from public.chain_records;
+    raise exception 'FAIL: deal record entries were deleted';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+    raise notice 'ok: deal record entries cannot be deleted';
+  end;
+end $$;
+insert into public.funds_checks (transaction_id, user_id, source, source_id, source_label, ownership_proven, required_amount, currency, sufficient, checked_at)
+  values (:'maple', :'olivia', 'bank_account', gen_random_uuid(), 'Chase •••• 4821', true, 20000000, 'USD', false, now());
+do $$ begin
+  begin
+    update public.funds_checks set sufficient = true;
+    raise exception 'FAIL: a proof-of-funds result was changed';
+  exception when others then
+    if sqlerrm like 'FAIL:%' then raise; end if;
+    raise notice 'ok: proof-of-funds results are append-only';
+  end;
+end $$;
+rollback;
+
 -- ----------------------------------------------------------------------------- platform admin: no implicit data access
 begin;
 select pg_temp.login('admin@demo.sagolik.test');

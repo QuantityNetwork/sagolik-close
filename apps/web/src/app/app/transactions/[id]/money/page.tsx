@@ -1,12 +1,12 @@
-import { BANK_STATUS_TEXT, bankConnectMode, listInstitutions, moneyView, myBankConnections, proofOfFundsFor } from "@sagolik/core";
+import { BANK_STATUS_TEXT, bankConnectMode, fundsChecksFor, listInstitutions, maskAddress, moneyView, myBankConnections, myWallets, proofOfFundsFor } from "@sagolik/core";
 import { formatDate, formatDateTime } from "@sagolik/i18n";
 import { SOURCE_OF_FUNDS_TYPES } from "@sagolik/types";
 import { Alert, Card, CardBody, CardHeader, DefinitionList, EmptyState, Field, formatMoney, Input, Select, StatusBadge, Textarea } from "@sagolik/ui";
 import { evaluateRules, latestInstruction } from "@sagolik/workflow";
-import { Banknote, Landmark, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Banknote, FlaskConical, Landmark, ShieldAlert, ShieldCheck, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { advancePaymentSandbox, confirmDisbursementSandbox } from "@/app/actions/sandbox";
+import { advancePaymentSandbox, confirmDisbursementSandbox, recordUsdcPaymentSandbox, startDemoWalletSandbox } from "@/app/actions/sandbox";
 import {
   addEscrowConditionAction,
   approvePaymentAction,
@@ -23,7 +23,9 @@ import {
   startBankConnectionAction,
   verifyInstructionAction,
 } from "@/app/actions/transaction";
+import { checkWalletFundsAction, refreshWalletAction, removeWalletAction } from "@/app/actions/wallets";
 import { ActionButton, ActionForm, SubmitButton } from "@/components/forms";
+import { WalletConnect } from "@/components/app/wallet-connect";
 import { WireDetails } from "@/components/app/wire-details";
 import { loadTx } from "@/lib/server/tx";
 
@@ -31,7 +33,7 @@ export const metadata: Metadata = { title: "Money" };
 
 const PAYMENT_TONE = { created: "neutral", authorization_required: "attention", authorized: "progress", initiated: "progress", processing: "progress", received: "info", settled: "done", failed: "blocked", returned: "blocked", cancelled: "stopped" } as const;
 
-export default async function MoneyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ bank?: string }> }) {
+export default async function MoneyPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ bank?: string; wallet?: string }> }) {
   const { id } = await params;
   const sp = await searchParams;
   const { ctx, snapshot: s, can, locale, actor, demo } = await loadTx(id);
@@ -54,11 +56,18 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
   const outstanding = s.escrow ? Math.max(0, s.escrow.requiredAmount - s.escrow.receivedAmount) : money.remainingAtClosing;
   const connectMode = bankConnectMode(ctx);
   const proofs = can("escrow.manage") || can("beneficiary.verify") ? await proofOfFundsFor(ctx, s) : [];
+  // Wallets hold USDC, counted at face value, so they apply to closings in US dollars.
+  const chain = ctx.providers.chain;
+  const walletsEnabled = !!chain && cur === "USD";
+  const wallets = walletsEnabled && can("payment.initiate") ? await myWallets(ctx, id) : [];
+  const checks = can("escrow.manage") || can("beneficiary.verify") ? await fundsChecksFor(ctx, s) : [];
+  const sandboxChain = demo && chain?.info.network === "sandbox";
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
       <div className="space-y-6">
         {sp.bank === "connected" ? <Alert tone="done">Your bank is connected and ownership verified.</Alert> : null}
+        {sp.wallet === "connected" ? <Alert tone="done">Your wallet is confirmed. Check it against the funds still needed under &ldquo;Your wallets&rdquo;.</Alert> : null}
 
         <Card>
           <CardHeader title="Summary" description="Estimated from the purchase price, loan and settled deposits. The approved closing statement is final." />
@@ -385,10 +394,33 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
                       <Field label="Reference in your system" htmlFor="mref">
                         <Input id="mref" name="reference" required minLength={3} maxLength={120} placeholder="e.g. Wire FW-1042" />
                       </Field>
+                      {walletsEnabled ? (
+                        <Field
+                          label={`USDC paid on ${chain!.info.networkLabel}? Transaction hash (optional)`}
+                          htmlFor="chainTxHash"
+                          hint="We read the transaction and check it moved exactly this amount of USDC. It's added to the deal record as evidence."
+                          className="sm:col-span-3"
+                        >
+                          <Input id="chainTxHash" name="chainTxHash" placeholder="0x…" autoComplete="off" spellCheck={false} className="font-mono text-[12.5px]" />
+                        </Field>
+                      ) : null}
                       <div className="sm:col-span-3">
                         <SubmitButton variant="secondary">Record</SubmitButton>
                       </div>
                     </ActionForm>
+                    {sandboxChain ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-2 rounded-control border border-dashed border-attention/40 px-3 py-2">
+                        <span className="flex items-center gap-1 text-[11px] font-medium text-attention">
+                          <FlaskConical className="h-3.5 w-3.5" aria-hidden /> Sandbox
+                        </span>
+                        <ActionForm action={recordUsdcPaymentSandbox} className="inline-block">
+                          <input type="hidden" name="transactionId" value={id} />
+                          <SubmitButton variant="ghost" size="sm">
+                            Simulate a USDC payment from the buyer&apos;s confirmed wallet
+                          </SubmitButton>
+                        </ActionForm>
+                      </div>
+                    ) : null}
                   </details>
                 ) : null}
                 {ledger.length ? (
@@ -436,11 +468,22 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
           </CardBody>
         </Card>
 
-        {proofs.length > 0 ? (
+        {proofs.length > 0 || checks.length > 0 ? (
           <Card>
-            <CardHeader title="Buyer's proof of funds" description="A real-time check of the buyer's own account against the amount still needed. You see the result, not the balance." />
+            <CardHeader title="Buyer's proof of funds" description="A real-time check of the buyer's own account or wallet against the amount still needed. You see the result, not the balance." />
             <CardBody>
               <ul className="space-y-2 text-[13px]">
+                {checks.map((c) => (
+                  <li key={c.id} className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-ink-2">
+                      {people[c.userId] ?? "Buyer"} · {c.sourceLabel} {c.ownershipProven ? (c.source === "wallet" ? "· control proven by signature" : "· in their name") : "· owner not confirmed"}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <StatusBadge tone={c.sufficient ? "done" : "attention"}>{c.sufficient ? `Covers ${formatMoney(c.requiredAmount, c.currency)}` : `Doesn't cover ${formatMoney(c.requiredAmount, c.currency)}`}</StatusBadge>
+                      <span className="text-[12px] text-ink-3">{formatDateTime(c.checkedAt, locale)}</span>
+                    </span>
+                  </li>
+                ))}
                 {proofs.map((p) => (
                   <li key={`${p.userId}-${p.accountMask}-${p.checkedAt}`} className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-ink-2">
@@ -527,6 +570,64 @@ export default async function MoneyPage({ params, searchParams }: { params: Prom
                   {connectMode.chooseAtProvider ? `Continue to ${connectMode.providerName}` : "Continue to your bank"}
                 </SubmitButton>
               </ActionForm>
+            </CardBody>
+          </Card>
+        ) : null}
+
+        {walletsEnabled && can("payment.initiate") ? (
+          <Card id="wallets" className="scroll-mt-24">
+            <CardHeader
+              title="Your wallets"
+              description={`Prove funds held as USDC on ${chain!.info.networkLabel}. You sign a message to show the wallet is yours; signing is free and can't move money or approve spending.`}
+            />
+            <CardBody className="space-y-4">
+              {wallets.map((w) => (
+                <div key={w.id} className="rounded-lg border border-line p-3 text-[13px]">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="flex items-center gap-2 font-medium text-ink">
+                      <Wallet className="h-4 w-4 text-ink-3" aria-hidden /> USDC wallet {maskAddress(w.address)}
+                    </p>
+                    <StatusBadge tone="done">Yours, by signature</StatusBadge>
+                  </div>
+                  <div className="mt-2 flex justify-between gap-2">
+                    <span className="text-ink-3">USDC (1 USDC counted as $1.00)</span>
+                    {w.usdcBalance !== null ? <span className="num text-ink">{formatMoney(w.usdcBalance, "USD")}</span> : <span className="text-ink-3">Balance unavailable</span>}
+                  </div>
+                  {w.usdcBalance !== null && w.balanceAsOf && outstanding > 0 ? (
+                    <p className={w.usdcBalance >= outstanding ? "text-[12px] text-success" : "text-[12px] text-attention"}>
+                      {w.usdcBalance >= outstanding ? `Covers the ${formatMoney(outstanding, cur)} still needed` : `${formatMoney(outstanding - w.usdcBalance, cur)} short of the ${formatMoney(outstanding, cur)} still needed`} · read{" "}
+                      {formatDateTime(w.balanceAsOf, locale)}
+                    </p>
+                  ) : null}
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {isBuyer && outstanding > 0 ? (
+                      <ActionButton action={checkWalletFundsAction} fields={{ walletId: w.id }} variant="ghost">
+                        Check funds for closing
+                      </ActionButton>
+                    ) : null}
+                    <ActionButton action={refreshWalletAction} fields={{ walletId: w.id }} variant="ghost">
+                      Refresh balance
+                    </ActionButton>
+                    <ActionButton action={removeWalletAction} fields={{ walletId: w.id }} variant="ghost" confirm="Stop using this wallet for this closing?">
+                      Remove
+                    </ActionButton>
+                  </div>
+                </div>
+              ))}
+              <WalletConnect transactionId={id} networkLabel={chain!.info.networkLabel} />
+              {sandboxChain ? (
+                <ActionForm action={startDemoWalletSandbox} className="rounded-control border border-dashed border-attention/40 px-3 py-2">
+                  <input type="hidden" name="transactionId" value={id} />
+                  <p className="flex items-center gap-1 text-[11px] font-medium text-attention">
+                    <FlaskConical className="h-3.5 w-3.5" aria-hidden /> Sandbox
+                  </p>
+                  <p className="mt-1 text-[12.5px] text-ink-3">No wallet handy? The demo includes a fictional wallet holding test USDC on the sandbox chain.</p>
+                  <SubmitButton variant="ghost" size="sm" className="mt-1" pendingLabel="Opening the demo wallet…">
+                    Use the demo wallet
+                  </SubmitButton>
+                </ActionForm>
+              ) : null}
+              <p className="text-[12px] text-ink-3">Sagolik never asks for your recovery phrase or private key, and never moves money from your wallet.</p>
             </CardBody>
           </Card>
         ) : null}

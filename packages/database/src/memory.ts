@@ -47,6 +47,19 @@ function guardInstructionUpdate(current: Row<"bank_instructions">, patch: Record
   }
 }
 
+const CHAIN_RECORD_FIXED = ["transactionId", "kind", "dealId", "receipt", "digest", "dedupeKey", "network", "chainId", "registry", "createdAt"];
+const CHAIN_RECORD_FINAL = ["status", "txHash", "sequence", "head", "blockNumber"];
+
+/** Mirrors the `chain_records_guard` trigger: what an entry commits to is fixed, and a confirmed entry is final. */
+function guardChainRecordUpdate(current: Row<"chain_records">, patch: Record<string, unknown>) {
+  const now = current as unknown as Record<string, unknown>;
+  for (const [k, v] of Object.entries(patch)) {
+    const changed = JSON.stringify(v) !== JSON.stringify(now[k]);
+    if (changed && CHAIN_RECORD_FIXED.includes(k)) throw new AppendOnlyViolationError(`chain_records.${k}`);
+    if (changed && current.status === "confirmed" && CHAIN_RECORD_FINAL.includes(k)) throw new AppendOnlyViolationError(`chain_records.${k} (confirmed)`);
+  }
+}
+
 class MemoryTable<T extends { id: string }> implements Table<T> {
   private rows = new Map<string, T>();
   constructor(
@@ -120,6 +133,7 @@ class MemoryTable<T extends { id: string }> implements Table<T> {
     const current = this.rows.get(id);
     if (!current) throw new NotFoundError(this.name, id);
     if (this.name === "bank_instructions") guardInstructionUpdate(current as unknown as Row<"bank_instructions">, patch);
+    if (this.name === "chain_records") guardChainRecordUpdate(current as unknown as Row<"chain_records">, patch);
     const next = this.parse({ ...current, ...patch, id, ...("updatedAt" in current ? { updatedAt: new Date().toISOString() } : {}) } as T);
     this.checkUnique(next, id);
     this.rows.set(id, clone(next));

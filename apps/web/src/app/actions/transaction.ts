@@ -321,7 +321,7 @@ export async function recordEscrowMovementAction(_p: ActionState, fd: FormData):
     const { ctx } = await requireContext();
     const txId = id(fd);
     const kind = formString(fd, "kind") === "disbursement" ? "disbursement" : "receipt";
-    await core.recordEscrowMovement(ctx, txId, { kind, amount: parseMoneyInput(formString(fd, "amount")) ?? 0, reference: formString(fd, "reference") ?? "" });
+    await core.recordEscrowMovement(ctx, txId, { kind, amount: parseMoneyInput(formString(fd, "amount")) ?? 0, reference: formString(fd, "reference") ?? "", chainTxHash: formString(fd, "chainTxHash") });
     return { message: kind === "receipt" ? "Funds received recorded." : "Payout recorded.", revalidate: [txPath(txId)] };
   });
 }

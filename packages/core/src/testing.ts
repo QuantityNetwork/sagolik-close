@@ -10,6 +10,7 @@ import { parseKeyRing } from "@sagolik/security";
 import type { Logger, ServiceContext } from "./context";
 import { professionalMemberships } from "./memberships";
 import { restoreSandboxBanking } from "./demo/sandbox-bank";
+import { restoreSandboxChain } from "./demo/sandbox-chain";
 import { buildDemoData, DEMO_PERSONAS, loadDemoData } from "./demo/seed";
 import { registerReactions } from "./services/reactions";
 import { handleWebhook } from "./services/webhooks";
@@ -42,6 +43,7 @@ export async function createTestHarness(opts: { seed?: boolean; flags?: ServiceC
     // People and organizations only.
     await loadDemoData(db, { rows: { profiles: demo.rows.profiles, organizations: demo.rows.organizations, organization_members: demo.rows.organization_members, organization_settings: demo.rows.organization_settings }, files: [] });
   }
+  if (providers.mocks.chain) await restoreSandboxChain(db, providers.mocks.chain);
   const flags = opts.flags ?? [{ key: "payment_initiation", enabled: true, rolloutPercent: 100, organizationIds: [] }];
 
   const base = (actor: ServiceContext["actor"]): ServiceContext => ({

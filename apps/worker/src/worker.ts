@@ -1,17 +1,20 @@
 /**
  * Background worker: delivers outbox domain events (notifications, reactions,
- * workflow reconciliation), retries failed provider webhooks, and re-checks
- * Property Autopilot portfolios (dates move even when nothing else changes).
+ * workflow reconciliation), retries failed provider webhooks, sends and
+ * confirms deal-record entries on Base, and re-checks Property Autopilot
+ * portfolios (dates move even when nothing else changes).
  *
  * In Supabase mode the web app only *records* events; this process is what
  * acts on them, so several instances can run safely — every row is claimed
  * with a conditional update before it is processed.
  */
-import { drainOutbox, retryFailedWebhooks, runAutopilotChecks, runBankActivityChecks, type ServiceContext } from "@sagolik/core";
+import { drainOutbox, retryFailedWebhooks, runAutopilotChecks, runBankActivityChecks, type ServiceContext, syncDealRecords } from "@sagolik/core";
 
 export interface TickResult {
   events: Record<string, number>;
   webhooksRetried: number;
+  /** Deal-record entries sent, confirmed or given up on this tick. */
+  dealRecords: Awaited<ReturnType<typeof syncDealRecords>>;
   /** New Autopilot decisions logged this tick (null when the check didn't run). */
   autopilotDecisions: number | null;
   /** Bills verified, costs suggested and lender updates from bank activity (null when it didn't run). */
@@ -28,6 +31,7 @@ let lastBankActivityCheck = 0;
 export async function tick(ctx: ServiceContext, now = Date.now()): Promise<TickResult> {
   const events = await drainOutbox(ctx, 100);
   const webhooksRetried = await retryFailedWebhooks(ctx, 25);
+  const dealRecords = await syncDealRecords(ctx, { limit: 25 });
   let autopilotDecisions: number | null = null;
   if (now - lastAutopilotCheck >= AUTOPILOT_CHECK_INTERVAL_MS) {
     lastAutopilotCheck = now;
@@ -38,7 +42,7 @@ export async function tick(ctx: ServiceContext, now = Date.now()): Promise<TickR
     lastBankActivityCheck = now;
     bankActivityChanges = await runBankActivityChecks(ctx);
   }
-  return { events, webhooksRetried, autopilotDecisions, bankActivityChanges };
+  return { events, webhooksRetried, dealRecords, autopilotDecisions, bankActivityChanges };
 }
 
 export interface LoopOptions {

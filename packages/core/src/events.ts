@@ -6,6 +6,7 @@
  * or in the worker, with retries, backoff and dead-lettering.
  */
 import { type AuditAction, type DomainEventType, nextAttemptDelay } from "@sagolik/audit";
+import { globalSingleton } from "@sagolik/integrations";
 import type { DomainEventRow } from "@sagolik/types";
 import { type ServiceContext, isUser } from "./context";
 
@@ -48,7 +49,11 @@ export interface EmitInput {
 }
 
 export type DomainEventHandler = (ctx: ServiceContext, event: DomainEventRow) => Promise<void>;
-const handlers = new Map<string, DomainEventHandler[]>();
+/**
+ * Process-wide: Next.js can load this module more than once (separate server
+ * bundles), and an event emitted from any copy must reach every registered handler.
+ */
+const handlers = globalSingleton("domain_event_handlers", () => new Map<string, DomainEventHandler[]>());
 
 export function onDomainEvent(type: DomainEventType, handler: DomainEventHandler) {
   const list = handlers.get(type) ?? [];

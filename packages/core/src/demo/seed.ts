@@ -10,9 +10,11 @@
  */
 import { createHash } from "node:crypto";
 import type { Db } from "@sagolik/database";
+import { canonicalJson, chainHead, dealIdFor, kindHex, type RecordReceipt, receiptDigest, SANDBOX_DEAL_SALT, SANDBOX_REGISTRY } from "@sagolik/integrations";
 import { encryptField, type KeyRing, sha256Hex } from "@sagolik/security";
 import type { Bill, Obligation, Row, TableName } from "@sagolik/types";
 import { addMonths, assessPortfolio, defaultReviewPolicies, type PassportInput } from "@sagolik/workflow";
+import { type Hex, keccak256, stringToHex, zeroHash } from "viem";
 import { objectKey } from "../storage";
 import { DEMO_ALEX_BANK, demoSnowRemovalBill } from "./bank-script";
 
@@ -634,6 +636,61 @@ export function buildDemoData(now: Date, keyRing: KeyRing): DemoData {
   ];
   for (const [from, to, off, reason, actor] of history) event(M, from, to, off, reason, actor);
 
+  // The deal record on the sandbox chain: what the reactions would have written as the closing moved.
+  // Receipts hold facts only, never names. Restored onto the sandbox chain at startup (sandbox-chain.ts).
+  const signedPa = rows.document_versions.find((v) => v.documentId === did("doc:maple:Purchase Agreement") && v.isSigned)!;
+  const shownInstruction = { purpose: "closing_funds_to_escrow", version: 1, beneficiaryName: "Maple Title & Escrow (Demo) — Trust Account", bankName: "Sandbox National Bank", accountMask: "6789", routingIdentifier: "021000021", currency: "USD" };
+  const mapleRecord: Array<[RecordReceipt["kind"], RecordReceipt["facts"], number, number]> = [
+    ["deal.opened", { reference: "SC-DEMO-MAPLE", type: "purchase", jurisdiction: "US-TX", currency: "USD" }, -32, 15],
+    ["milestone.completed", { from: "draft", to: "invited" }, -31, 15],
+    ["milestone.completed", { from: "invited", to: "identity_pending" }, -31, 16],
+    ["document.version", { documentId: signedPa.documentId, category: "purchase_agreement", version: signedPa.version, sha256: signedPa.sha256, signed: true }, -30, 15],
+    ["instruction.verified", { instructionId, purpose: "closing_funds_to_escrow", version: 1, method: "out_of_band_call", fingerprint: createHash("sha256").update(canonicalJson(shownInstruction)).digest("hex") }, -26, 15],
+    ["funds.received", { amountCents: 2_500_000, currency: "USD", source: "settled_payment" }, -25, 15],
+    ["milestone.completed", { from: "identity_pending", to: "documents_pending" }, -24, 15],
+    ["milestone.completed", { from: "documents_pending", to: "financing_pending" }, -24, 16],
+    ["milestone.completed", { from: "financing_pending", to: "conditions_pending" }, -12, 15],
+    ["milestone.completed", { from: "conditions_pending", to: "ready_for_signing" }, -2, 15],
+    ["milestone.completed", { from: "ready_for_signing", to: "signing" }, -1, 15],
+  ];
+  const mapleDeal = dealIdFor(SANDBOX_DEAL_SALT, M);
+  let head: Hex = zeroHash;
+  for (const [i, [kind, facts, offset, hour]] of mapleRecord.entries()) {
+    const sequence = i + 1;
+    const occurredAt = day(offset, hour);
+    const receipt: RecordReceipt = { v: 1, dealId: mapleDeal, kind, facts, occurredAt, nonce: keccak256(stringToHex(`sagolik-demo:record-nonce:maple:${sequence}`)) };
+    const digest = receiptDigest(receipt);
+    head = chainHead(head, kindHex(kind), digest, sequence);
+    const recordedAt = new Date(Date.parse(occurredAt) + 60_000).toISOString();
+    add("chain_records", {
+      id: did(`chain:maple:${sequence}`),
+      transactionId: M,
+      kind,
+      dealId: mapleDeal,
+      receipt: receipt as unknown as Record<string, unknown>,
+      digest,
+      dedupeKey: `demo:maple:${sequence}`,
+      network: "sandbox",
+      chainId: 31337,
+      registry: SANDBOX_REGISTRY,
+      status: "confirmed",
+      txHash: keccak256(stringToHex(`sagolik-demo:record-tx:maple:${sequence}`)),
+      txNonce: i,
+      previousTxHashes: [],
+      sequence,
+      head,
+      blockNumber: String(1_000 + sequence * 7),
+      attempts: 1,
+      lastError: null,
+      nextAttemptAt: null,
+      submittedAt: occurredAt,
+      confirmedAt: recordedAt,
+      recordedAt,
+      createdAt: occurredAt,
+      updatedAt: recordedAt,
+    });
+  }
+
   sysMsg("maple", M, "Olivia Carter's identity is verified.", -24);
   sysMsg("maple", M, "Hi Olivia — welcome! I'll keep everything moving on our side. Ask me anything here.", -30, "jessica.morgan");
   sysMsg("maple", M, "Title is clear. The 2019 HOA lien was released and the release is recorded.", -6, "priya.shah");
@@ -1063,6 +1120,9 @@ export const SEED_ORDER: TableName[] = [
   "notifications",
   "notification_preferences",
   "calendar_events",
+  "wallet_connections",
+  "funds_checks",
+  "chain_records",
   "integrations",
   "webhook_events",
   "domain_events",

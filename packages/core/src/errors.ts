@@ -4,7 +4,7 @@
  */
 import { AuthorizationError, StepUpRequiredError } from "@sagolik/auth";
 import { NotFoundError as DbNotFound, UniqueViolationError } from "@sagolik/database";
-import { ProviderError } from "@sagolik/integrations";
+import { isProviderError } from "@sagolik/integrations";
 import type { ErrorCode } from "@sagolik/types";
 import { InvalidTransitionError } from "@sagolik/workflow";
 import { ZodError } from "zod";
@@ -39,9 +39,9 @@ export function toAppError(e: unknown): AppError {
       e.unmet.map((u) => ({ path: u.fact, message: u.detail })),
     );
   }
-  if (e instanceof ProviderError) return new AppError("provider_error", e.userMessage, 502);
+  if (isProviderError(e)) return new AppError("provider_error", e.userMessage, 502);
   if (e instanceof DbNotFound) return notFound();
-  if (e instanceof UniqueViolationError) return conflict("That already exists.");
+  if (e instanceof UniqueViolationError || (e as { code?: unknown } | null)?.code === "conflict") return conflict("That already exists.");
   if (e instanceof ZodError) {
     return badRequest(
       "Some of the information provided isn't valid.",

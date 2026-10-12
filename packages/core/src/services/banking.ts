@@ -20,6 +20,7 @@ import { reconcile } from "./engine";
 import { notify } from "./notifications";
 import { completeTasksFor } from "./transactions";
 import { fundsStillNeeded } from "./views";
+import { recordFundsCheck } from "./wallets";
 
 /*
  * Two modes. Without the money service, the web app talks to the banking
@@ -428,6 +429,19 @@ export async function checkFundsForClosing(ctx: ServiceContext, connectionId: st
   const checkedAt = nowIso(ctx);
   await ctx.writer.bank_accounts.update(account.id, { availableBalance: bal.available, currentBalance: bal.current, balanceAsOf: bal.asOf });
   const sufficient = bal.available !== null && bal.available >= required;
+  // Escrow and verifiers see this result (never the balance).
+  await recordFundsCheck(ctx, {
+    transactionId: conn.transactionId,
+    userId: actor.userId,
+    source: "bank_account",
+    sourceId: account.id,
+    sourceLabel: `${conn.institutionName} •••• ${account.mask}`,
+    ownershipProven: account.ownershipVerified,
+    requiredAmount: required,
+    currency,
+    sufficient,
+    checkedAt,
+  });
   await audit(ctx, {
     action: "bank.funds_checked",
     resourceType: "bank_account",

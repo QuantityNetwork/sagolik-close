@@ -89,4 +89,6 @@ export const UNIQUE_KEYS: Partial<Record<TableName, string[][]>> = {
   plans: [["key"]],
   idempotency_keys: [["key", "userId", "route"]],
   mfa_recovery_codes: [["userId", "codeHash"]],
+  wallet_connections: [["challengeNonce"]],
+  chain_records: [["digest"], ["dedupeKey"], ["network", "registry", "dealId", "sequence"]],
 };

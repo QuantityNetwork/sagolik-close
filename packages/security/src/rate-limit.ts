@@ -41,6 +41,8 @@ export const RATE_LIMITS = {
   upload: { limit: 30, windowMs: 60_000 },
   webhook: { limit: 600, windowMs: 60_000 },
   assistant: { limit: 30, windowMs: 60_000 },
+  /** Wallet checks and deal-record verification: each one reads from a blockchain node. */
+  chain: { limit: 20, windowMs: 60_000 },
 } as const satisfies Record<string, RateLimitPolicy>;
 
 export interface RateLimitResult {

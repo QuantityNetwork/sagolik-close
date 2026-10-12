@@ -1014,6 +1014,80 @@ export const IdempotencyKey = z.object({
 });
 export type IdempotencyKey = z.infer<typeof IdempotencyKey>;
 
+// ----------------------------------------------------------------------------- wallets and the deal record (record and verify only)
+
+export const CHAIN_NETWORKS = ["sandbox", "base", "base-sepolia", "local"] as const;
+export const ChainNetworkName = z.enum(CHAIN_NETWORKS);
+const EvmAddress = z.string().regex(/^0x[0-9a-fA-F]{40}$/);
+const Bytes32 = z.string().regex(/^0x[0-9a-f]{64}$/);
+
+/** A wallet a person proved they control by signing a message. Owner-only; Sagolik never holds its keys. */
+export const WalletConnection = z.object({
+  ...base,
+  userId: Uuid,
+  transactionId: Uuid,
+  network: ChainNetworkName,
+  chainId: z.number().int().positive(),
+  address: EvmAddress,
+  challengeNonce: z.string().min(16).max(128),
+  status: z.enum(["verified", "removed"]),
+  verifiedAt: Timestamp,
+  /** Whole cents of USDC at the last read. */
+  usdcBalance: nullable(MinorUnits),
+  balanceBlock: nullable(z.string()),
+  balanceAsOf: nullable(Timestamp),
+});
+export type WalletConnection = z.infer<typeof WalletConnection>;
+
+/** A proof-of-funds result the closing's escrow and verifiers may see: the result, never the balance. */
+export const FundsCheck = z.object({
+  id: Uuid,
+  transactionId: Uuid,
+  userId: Uuid,
+  source: z.enum(["bank_account", "wallet"]),
+  sourceId: Uuid,
+  sourceLabel: z.string(),
+  ownershipProven: z.boolean(),
+  requiredAmount: MinorUnits,
+  currency: Currency,
+  sufficient: z.boolean(),
+  checkedAt: Timestamp,
+  createdAt: Timestamp,
+});
+export type FundsCheck = z.infer<typeof FundsCheck>;
+
+export const CHAIN_RECORD_KINDS = ["deal.opened", "milestone.completed", "document.version", "instruction.verified", "funds.received", "ownership.transferred"] as const;
+export type ChainRecordKind = (typeof CHAIN_RECORD_KINDS)[number];
+export const CHAIN_RECORD_STATUSES = ["queued", "submitted", "confirmed", "failed"] as const;
+
+/** One entry in the deal record: the receipt stays here, its fingerprint goes on chain. */
+export const ChainRecord = z.object({
+  ...base,
+  transactionId: Uuid,
+  kind: z.enum(CHAIN_RECORD_KINDS),
+  dealId: Bytes32,
+  receipt: Json,
+  digest: Bytes32,
+  dedupeKey: z.string(),
+  network: ChainNetworkName,
+  chainId: z.number().int().positive(),
+  registry: EvmAddress,
+  status: z.enum(CHAIN_RECORD_STATUSES),
+  txHash: nullable(Bytes32),
+  txNonce: nullable(z.number().int().nonnegative()),
+  previousTxHashes: z.array(Bytes32),
+  sequence: nullable(z.number().int().positive()),
+  head: nullable(Bytes32),
+  blockNumber: nullable(z.string()),
+  attempts: z.number().int().nonnegative(),
+  lastError: nullable(z.string()),
+  nextAttemptAt: nullable(Timestamp),
+  submittedAt: nullable(Timestamp),
+  confirmedAt: nullable(Timestamp),
+  recordedAt: nullable(Timestamp),
+});
+export type ChainRecord = z.infer<typeof ChainRecord>;
+
 /**
  * Registry: SQL table name → row schema. The data layer is generic over this
  * map and the parity test compares each schema's keys with the migration.
@@ -1081,6 +1155,9 @@ export const TABLE_SCHEMAS = {
   consent_records: ConsentRecord,
   idempotency_keys: IdempotencyKey,
   mfa_recovery_codes: MfaRecoveryCode,
+  wallet_connections: WalletConnection,
+  funds_checks: FundsCheck,
+  chain_records: ChainRecord,
 } as const;
 
 export type TableName = keyof typeof TABLE_SCHEMAS;
@@ -1094,6 +1171,7 @@ export const APPEND_ONLY_TABLES = [
   "payment_events",
   "consent_records",
   "autopilot_decisions",
+  "funds_checks",
 ] as const satisfies readonly TableName[];
 
 /**

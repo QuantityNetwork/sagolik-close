@@ -29,6 +29,15 @@ export class ProviderError extends Error {
   }
 }
 
+/**
+ * `instanceof` across copies of this module: Next.js can load a package more
+ * than once per process, so an error thrown by one copy fails `instanceof`
+ * against another copy's class.
+ */
+export function isProviderError(e: unknown): e is ProviderError {
+  return e instanceof ProviderError || (typeof e === "object" && e !== null && (e as Error).name === "ProviderError" && "userMessage" in e && "code" in e);
+}
+
 export interface NormalizedWebhook {
   externalEventId: string;
   eventType: string;

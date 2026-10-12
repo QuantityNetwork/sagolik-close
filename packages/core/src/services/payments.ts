@@ -165,6 +165,7 @@ export async function verifyBankInstruction(ctx: ServiceContext, instructionId: 
     organizationId: s.transaction.organizationId,
     metadata: { method, version: ins.version, hasReference: reference.trim() !== "" },
   });
+  await emit(ctx, { type: "bank_instruction.verified", aggregateType: "bank_instruction", aggregateId: ins.id, transactionId: ins.transactionId, idempotencyKey: `bank_instruction.verified:${ins.id}` });
   await postSystemMessage(ctx, ins.transactionId, `Escrow payment instructions v${ins.version} (account ending ${ins.accountMask}) were verified by ${actor.displayName}.`, { type: "bank_instruction", id: ins.id });
   await reconcile(ctx, ins.transactionId);
   return updated;
@@ -429,7 +430,7 @@ export async function handlePaymentEvent(ctx: ServiceContext, data: Record<strin
   if (escrow && to === "settled") {
     const received = escrow.receivedAmount + payment.amount;
     await ctx.writer.escrow_accounts.update(escrow.id, { receivedAmount: received, status: received >= escrow.requiredAmount ? "funded" : "awaiting_deposit" });
-    await emit(ctx, { type: "escrow.deposit_received", aggregateType: "escrow_account", aggregateId: escrow.id, transactionId: payment.transactionId, payload: { amount: payment.amount }, idempotencyKey: `escrow.deposit_received:${payment.id}` });
+    await emit(ctx, { type: "escrow.deposit_received", aggregateType: "escrow_account", aggregateId: escrow.id, transactionId: payment.transactionId, payload: { amount: payment.amount, source: "settled_payment" }, idempotencyKey: `escrow.deposit_received:${payment.id}` });
   }
   if (escrow && to === "returned" && payment.status === "settled") {
     await ctx.writer.escrow_accounts.update(escrow.id, { receivedAmount: Math.max(0, escrow.receivedAmount - payment.amount), status: "awaiting_deposit" });

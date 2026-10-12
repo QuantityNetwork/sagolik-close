@@ -4,10 +4,12 @@
  * runs locally with zero keys.
  */
 import type { Env } from "@sagolik/config";
+import type { Address, Hex } from "viem";
 import type { WebhookCapable } from "./common";
 import { MockBankingProvider } from "./banking/mock";
 import { PlaidBankingProvider } from "./banking/plaid";
 import type { BankingProvider } from "./banking/provider";
+import { BaseChainProvider, type ChainProvider, SandboxChainProvider } from "./chain";
 import { MockEscrowProvider, type EscrowProvider } from "./escrow";
 import { MockIdentityProvider, type IdentityProvider } from "./identity";
 import { ManualInsuranceProvider, type InsuranceProvider } from "./insurance";
@@ -39,6 +41,8 @@ export interface Providers {
   /** Delivers contact-form enquiries to the Sagolik team (real email whenever configured, even in demo mode). */
   contactEmail: EmailProvider;
   sms: SmsProvider;
+  /** Deal record and wallet checks on Base (record and verify only). Null when CHAIN_NETWORK=off. */
+  chain: ChainProvider | null;
   /** Every provider that can receive webhooks, keyed by provider id (the URL segment). */
   webhookReceivers: Map<string, WebhookCapable>;
   /** Present only when mocks are active — used by sandbox pages. */
@@ -48,6 +52,7 @@ export interface Providers {
     signatures?: MockSignatureProvider;
     payments?: MockPaymentProvider;
     escrow?: MockEscrowProvider;
+    chain?: SandboxChainProvider;
   };
 }
 
@@ -85,6 +90,18 @@ export function createProviders(env: Env): Providers {
       ? new TwilioSmsProvider({ accountSid: env.TWILIO_ACCOUNT_SID, authToken: env.TWILIO_AUTH_TOKEN, from: env.TWILIO_FROM_NUMBER })
       : new OutboxSmsProvider();
 
+  let chain: ChainProvider | null = null;
+  if (env.chainNetwork === "sandbox") chain = mocks.chain = new SandboxChainProvider();
+  else if (env.chainNetwork !== "off") {
+    chain = new BaseChainProvider({
+      network: env.chainNetwork,
+      rpcUrl: env.CHAIN_RPC_URL,
+      registry: env.CHAIN_REGISTRY_ADDRESS as Address,
+      recorderKey: env.CHAIN_RECORDER_KEY as Hex | undefined,
+      usdc: env.CHAIN_USDC_ADDRESS as Address | undefined,
+    });
+  }
+
   if (env.APP_ENV === "production") {
     const sandboxed = Object.entries(mocks)
       // With the money service, bank connections go through it (and its own Plaid settings), not this adapter.
@@ -114,6 +131,7 @@ export function createProviders(env: Env): Providers {
     email,
     contactEmail,
     sms,
+    chain,
     webhookReceivers,
     mocks,
   };

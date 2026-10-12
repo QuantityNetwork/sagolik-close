@@ -8,6 +8,8 @@ const ROWS = [
   ["Identity & AML decisions", "Never automated by AI.", "Provider results plus a named human reviewer for any exception."],
   ["Signatures", "Never applied on a user's behalf.", "Hand-off to an e-signature provider; signed copies are hashed and stored."],
   ["Title & recording", "Never marked complete by a button.", "Ownership is recorded only from a registry confirmation reference."],
+  ["Wallets", "Never holds wallet keys, asks for a recovery phrase or moves money from a wallet.", "You sign a message to show a wallet is yours. We read its USDC balance and show escrow the result, not the balance."],
+  ["Deal record on Base", "Never puts names, addresses, amounts or documents on a blockchain, and holds no funds in a contract.", "Fingerprints of the closing's key facts are recorded on Base. The receipts stay with the people on the closing, who can check them independently."],
   ["Advice", "No legal, tax or lending advice.", "Plain-language explanations and pointers to the responsible professional."],
 ] as const;
 

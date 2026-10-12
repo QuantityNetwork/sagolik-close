@@ -22,6 +22,7 @@ import { newCorrelationId } from "@sagolik/audit";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { consoleLogger, type Logger, type ServiceContext } from "./context";
 import { restoreSandboxBanking } from "./demo/sandbox-bank";
+import { restoreSandboxChain } from "./demo/sandbox-chain";
 import { buildDemoData, loadDemoData } from "./demo/seed";
 import { registerReactions } from "./services/reactions";
 import { handleWebhook } from "./services/webhooks";
@@ -109,7 +110,7 @@ export async function getRuntime(): Promise<Runtime> {
 /** Restore sandbox provider state from persisted records so seeded/demo flows keep working across restarts. */
 async function hydrateSandboxProviders(rt: Runtime) {
   const db = rt.serviceDb;
-  const { signatures, banking, payments } = rt.providers.mocks;
+  const { signatures, banking, payments, chain } = rt.providers.mocks;
   if (signatures) {
     for (const sig of await db.document_signatures.find({ provider: signatures.info.id, status: ["sent", "viewed", "signed"] })) {
       const doc = await db.documents.get(sig.documentId);
@@ -125,6 +126,7 @@ async function hydrateSandboxProviders(rt: Runtime) {
     }
   }
   if (banking) await restoreSandboxBanking(db, banking, rt.keyRing);
+  if (chain) await restoreSandboxChain(db, chain);
   if (payments) {
     for (const p of await db.payments.find({ provider: payments.info.id })) {
       if (p.externalPaymentId) payments.hydrate({ id: p.externalPaymentId, idempotencyKey: p.idempotencyKey, amount: p.amount, currency: p.currency, status: p.status });

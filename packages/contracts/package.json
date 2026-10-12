@@ -1,0 +1,19 @@
+{
+  "name": "@sagolik/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sagolik Close on-chain deal registry (Base). Records only: no funds, no personal data.",
+  "scripts": {
+    "build": "hardhat build",
+    "test": "hardhat test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox-viem": "^5.0.7",
+    "@openzeppelin/contracts": "^5.6.1",
+    "@types/node": "^22.20.4",
+    "hardhat": "^3.19.0",
+    "typescript": "^5.9.3",
+    "viem": "^2.57.4"
+  }
+}
