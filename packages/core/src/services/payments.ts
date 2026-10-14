@@ -326,8 +326,11 @@ export async function approvePayment(ctx: ServiceContext, paymentId: string): Pr
 
 async function submitToProvider(ctx: ServiceContext, s: TransactionSnapshot, payment: Payment, ins: BankInstruction): Promise<Payment> {
   const account = payment.fromAccountId ? await ctx.writer.bank_accounts.get(payment.fromAccountId) : null;
-  // Decrypted only for this call; never logged or returned.
-  const accountNumber = decryptField(ins.encryptedAccountNumber, ctx.keyRing, `bank_instruction:${ins.transactionId}:${ins.purpose}`);
+  // People's reads never include the encrypted account number (the database hides that column from them),
+  // so the service reads it here. Decrypted only for this call; never logged or returned.
+  const sealed = (await ctx.writer.bank_instructions.get(ins.id))?.encryptedAccountNumber;
+  if (!sealed) throw notFound("Those payment instructions");
+  const accountNumber = decryptField(sealed, ctx.keyRing, `bank_instruction:${ins.transactionId}:${ins.purpose}`);
   const res = await ctx.providers.payments.createPayment({
     idempotencyKey: payment.idempotencyKey,
     amount: payment.amount,

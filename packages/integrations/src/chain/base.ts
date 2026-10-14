@@ -24,7 +24,7 @@ import {
   type Address,
   type Chain,
   type Hex,
-  type PrivateKeyAccount,
+  type LocalAccount,
   type PublicClient,
   type TransactionReceipt,
 } from "viem";
@@ -52,8 +52,10 @@ export interface BaseChainOptions {
   /** JSON-RPC endpoint; defaults to the network's public endpoint. */
   rpcUrl?: string;
   registry: Address;
-  /** The recording account's key. Without it everything works except `record`. */
+  /** The recording account's key. Without it (or `recorder`) everything works except `record`. */
   recorderKey?: Hex;
+  /** Or the recording account itself, when its key signs elsewhere (Key Vault's HSM) and can't be handed over. */
+  recorder?: LocalAccount;
   /** Local test networks only: the token to read as USDC. */
   usdc?: Address;
   /** Blocks on top of the one holding a transaction before it counts as confirmed. */
@@ -65,7 +67,7 @@ export class BaseChainProvider implements ChainProvider {
   private readonly client: PublicClient;
   private readonly chain: Chain;
   private readonly registry: Address;
-  private readonly account: PrivateKeyAccount | null;
+  private readonly account: LocalAccount | null;
   private readonly explorer: string | null;
   private readonly confirmations: number;
   /** Submissions from this process go out one at a time, so they never race for a nonce. */
@@ -77,7 +79,8 @@ export class BaseChainProvider implements ChainProvider {
     if (!usdc) throw new Error("A local test network needs the address of a token to read as USDC.");
     this.chain = n.chain;
     this.client = createPublicClient({ chain: n.chain, transport: http(opts.rpcUrl, { retryCount: 2, timeout: 15_000 }) }) as PublicClient;
-    this.account = opts.recorderKey ? privateKeyToAccount(opts.recorderKey) : null;
+    if (opts.recorder && opts.recorderKey) throw new Error("Give the recording account or its key, not both.");
+    this.account = opts.recorder ?? (opts.recorderKey ? privateKeyToAccount(opts.recorderKey) : null);
     this.registry = getAddress(opts.registry);
     this.explorer = n.explorer;
     this.confirmations = opts.confirmations ?? n.confirmations;

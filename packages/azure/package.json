@@ -1,0 +1,23 @@
+{
+  "name": "@sagolik/azure",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Azure glue: managed-identity credentials, Entra tokens for PostgreSQL, Blob Storage, Key Vault key wrapping and HSM signing.",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "dependencies": {
+    "@azure/identity": "^4.14.0",
+    "@azure/keyvault-keys": "^4.10.2",
+    "@azure/storage-blob": "^12.34.0",
+    "viem": "^2.57.4"
+  },
+  "devDependencies": {
+    "azurite": "^3.37.0"
+  }
+}

@@ -1,5 +1,6 @@
-import { createPublicClient, createWalletClient, getAddress, http, toHex, type Abi, type Account, type Address, type Hex } from "viem";
-import { mnemonicToAccount } from "viem/accounts";
+import { secp256k1Account } from "@sagolik/azure";
+import { createPublicClient, createWalletClient, getAddress, hexToBigInt, http, keccak256, numberToHex, parseEther, toHex, type Abi, type Account, type Address, type Hex } from "viem";
+import { mnemonicToAccount, privateKeyToAccount, sign } from "viem/accounts";
 import { hardhat } from "viem/chains";
 import { describe, expect, it } from "vitest";
 import { BaseChainProvider } from "./base";
@@ -97,5 +98,35 @@ describe.skipIf(!rpc)("Base adapter (local node)", () => {
 
     // The registry can't take money.
     await expect(as(outsider).sendTransaction({ to: registry, value: 1n })).rejects.toThrow();
+  });
+
+  it("records through an account whose key never enters the process (Key Vault's HSM in production)", { timeout: 60_000 }, async () => {
+    // Stands in for Key Vault's ES256K operation: it gets a 32-byte digest and returns r || s, in whichever s form it likes.
+    const hsmKey = keccak256(toHex("sagolik: stand-in for a key that lives in an HSM"));
+    const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+    let signatures = 0;
+    const recorder = await secp256k1Account({
+      publicKey: privateKeyToAccount(hsmKey).publicKey,
+      async signDigest(digest) {
+        signatures++;
+        const sig = await sign({ hash: toHex(digest), privateKey: hsmKey });
+        const highS = N - hexToBigInt(sig.s); // the high-s form, which Ethereum refuses unless normalised
+        return Buffer.from(sig.r.slice(2) + numberToHex(highS, { size: 32 }).slice(2), "hex");
+      },
+    });
+    const [admin] = [dev(0)];
+    await mined(await as(admin).sendTransaction({ to: recorder.address, value: parseEther("1") }));
+    const registry = await deploy(admin, DEAL_REGISTRY_ABI, DEAL_REGISTRY_BYTECODE, [admin.address, recorder.address]);
+    const chain = new BaseChainProvider({ network: "local", rpcUrl: rpc, registry, recorder, usdc: admin.address });
+    expect(chain.info.canRecord).toBe(true);
+    expect(chain.recorderAddress).toBe(recorder.address);
+
+    const dealId = dealIdFor("integration-salt".repeat(2), "tx-hsm");
+    const entry = { kind: kindHex("deal.opened"), digest: toHex(7n, { size: 32 }) };
+    const submitted = await chain.record({ dealId, ...entry });
+    await mined(submitted.txHash);
+    expect(await chain.recordState(submitted.txHash)).toMatchObject({ state: "confirmed", sequence: 1, head: replayHead([{ ...entry, sequence: 1 }]) });
+    expect(signatures).toBe(1);
+    expect(() => new BaseChainProvider({ network: "local", rpcUrl: rpc, registry, recorder, recorderKey: keyOf(1), usdc: admin.address })).toThrow(/not both/);
   });
 });

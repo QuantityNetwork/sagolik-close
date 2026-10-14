@@ -20,7 +20,8 @@
     "test:e2e": "pnpm --filter @sagolik/web test:e2e",
     "gen:sql": "tsx scripts/gen-reference-sql.ts",
     "gen:seed": "tsx scripts/gen-seed-sql.ts",
-    "seed:storage": "tsx scripts/seed-storage.ts"
+    "seed:storage": "tsx scripts/seed-storage.ts",
+    "test:db:azure": "bash scripts/postgres-it.sh"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

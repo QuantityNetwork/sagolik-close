@@ -6,10 +6,15 @@
   "scripts": {
     "start": "tsx src/main.ts",
     "once": "tsx src/main.ts --once",
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "migrate": "tsx src/migrate.ts",
+    "keys": "tsx src/keys.ts"
   },
   "dependencies": {
-    "@sagolik/core": "workspace:*"
+    "@sagolik/azure": "workspace:*",
+    "@sagolik/config": "workspace:*",
+    "@sagolik/core": "workspace:*",
+    "@sagolik/database": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.20.0"

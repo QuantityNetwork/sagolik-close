@@ -16,5 +16,8 @@
     "@sagolik/types": "workspace:*",
     "viem": "^2.57.4",
     "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@sagolik/azure": "workspace:*"
   }
 }

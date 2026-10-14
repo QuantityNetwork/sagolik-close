@@ -5,8 +5,8 @@ const log = (level: "info" | "error", msg: string, extra: Record<string, unknown
 
 const rt = await getRuntime();
 const makeContext = async () => systemContext(rt, "worker", await loadFlags(rt));
-if (rt.mode === "memory") {
-  log("info", "Demo mode uses an in-process store; events are processed inline by the web app. Nothing for the worker to do.");
+if (rt.outboxMode === "inline") {
+  log("info", "Demo mode keeps sandbox providers in the web app's process, so it processes events inline. Nothing for the worker to do.");
   process.exit(0);
 }
 
@@ -34,3 +34,4 @@ await runLoop(makeContext, {
   onError: (e) => log("error", "tick failed", { error: e instanceof Error ? e.message : String(e) }),
 });
 log("info", "worker stopped");
+process.exit(0);

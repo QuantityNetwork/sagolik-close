@@ -4,6 +4,7 @@ import type { NextConfig } from "next";
 const workspacePackages = [
   "@sagolik/audit",
   "@sagolik/auth",
+  "@sagolik/azure",
   "@sagolik/config",
   "@sagolik/core",
   "@sagolik/database",
@@ -17,6 +18,8 @@ const workspacePackages = [
 
 const nextConfig: NextConfig = {
   transpilePackages: workspacePackages,
+  // The Azure SDKs load at run time from node_modules (only when Azure is configured), not bundled.
+  serverExternalPackages: ["@azure/identity", "@azure/keyvault-keys", "@azure/storage-blob"],
   // Container builds (Dockerfile) ship the self-contained server; Vercel ignores this.
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
   outputFileTracingRoot: resolve(process.cwd(), "../.."),

@@ -32,6 +32,17 @@ export interface Table<T extends { id: string }> {
 
 export type Db = { readonly [K in TableName]: Table<Row<K>> };
 
+/**
+ * Columns people never read, whatever their permissions: the database grants
+ * `authenticated` every column of these tables except these (see the RLS
+ * migration), so a person's reads leave them out and the service layer reads
+ * them when it needs them. The PostgreSQL store works this out from the
+ * grants themselves; the Supabase store uses this list.
+ */
+export const PERSON_HIDDEN_COLUMNS: Partial<Record<TableName, readonly string[]>> = {
+  bank_instructions: ["encrypted_account_number"],
+};
+
 export class NotFoundError extends Error {
   readonly code = "not_found" as const;
   constructor(table: string, id: string) {

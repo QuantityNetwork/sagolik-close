@@ -113,11 +113,12 @@ USDC contracts: Base `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, Base Sepolia 
 | `CHAIN_NETWORK` | `off`, `sandbox` (in-memory demo chain), `base-sepolia`, `base` or `local`. Default: `sandbox` in demo mode, otherwise `off`. Production allows only `base` or `off`. |
 | `CHAIN_REGISTRY_ADDRESS` | The deployed registry. Required for live networks. |
 | `CHAIN_DEAL_SALT` | Secret (≥32 characters) that makes deal ids unlinkable. Required for live networks. **Keep it stable:** changing it starts a new deal id for every closing. |
-| `CHAIN_RECORDER_KEY` | Private key of the recording account (`RECORDER_ROLE` only). Set it where entries are sent (the worker). Without it, entries wait in the queue. |
+| `CHAIN_RECORDER_KEY_ID` | The recording account's key in Azure Key Vault: an HSM-backed EC key on curve P-256K (secp256k1). Key Vault signs each entry; the key never leaves the HSM, and the recording account is its address. Required in production. Set it where entries are sent (the worker). Without a recording key, entries wait in the queue. |
+| `CHAIN_RECORDER_KEY` | Test networks only: the recording account's private key (`RECORDER_ROLE` only). Refused in production. |
 | `CHAIN_RPC_URL` | JSON-RPC endpoint (https). Defaults to the public Base endpoint, which is rate-limited; use a provider in production. |
 | `CHAIN_USDC_ADDRESS` | Local test networks only. |
 
-Store the salt and the recorder key as sensitive secrets, never in the repository.
+Store the salt as a sensitive secret, never in the repository.
 
 ## Deploying the registry (Base Sepolia first)
 
@@ -126,7 +127,9 @@ Deployment is signed by the treasury wallet (for example in PayBox). No private 
 ```bash
 pnpm --filter @sagolik/contracts build
 cd packages/contracts
-# 1. A recording account for the service: generate it in your secret manager and keep only its address here.
+# 1. A recording account for the service: a key generated inside Key Vault's HSM. Only its address leaves the vault:
+#      az keyvault key create --vault-name <vault> --name chain-recorder --kty EC-HSM --curve P-256K --ops sign verify
+#      pnpm --filter @sagolik/worker keys recorder-address https://<vault>.vault.azure.net/keys/chain-recorder
 # 2. Build the unsigned deployment transaction (prints the transaction, the future contract address and the most it can cost).
 node --experimental-strip-types scripts/deploy-tx.ts --network base-sepolia --admin <treasury address> --recorder <recorder address>
 # 3. Sign that transaction with the treasury wallet. 4. Send it and check the roles:
@@ -135,7 +138,7 @@ node --experimental-strip-types scripts/broadcast.ts --network base-sepolia --ra
 
 Then:
 1. Send the recording account a little ETH for gas (a few dollars lasts thousands of entries).
-2. Set `CHAIN_NETWORK`, `CHAIN_REGISTRY_ADDRESS`, `CHAIN_DEAL_SALT`, `CHAIN_RECORDER_KEY` and `CHAIN_RPC_URL` as sensitive environment variables.
+2. Set `CHAIN_NETWORK`, `CHAIN_REGISTRY_ADDRESS`, `CHAIN_DEAL_SALT`, `CHAIN_RECORDER_KEY_ID` and `CHAIN_RPC_URL` on the worker. Give the worker's managed identity the right to sign with that one key, nothing else.
 3. Deploy the app and record a test closing.
 4. When satisfied, repeat on `base`.
 
@@ -145,5 +148,5 @@ Admin operations go through the treasury wallet: `grantRole` and `revokeRole` fo
 
 - `pnpm --filter @sagolik/contracts test`: contract behaviour (roles, hash chain, event replay, refusals, revocation, admin delay, no money) and a check that the ABI and bytecode the app uses match the compiled contract.
 - `pnpm test`: record rules, sandbox chain, wallet proof of funds, delivery and recovery (outage, crash between saving and sending, refusal), verification and divergence, the full closing lifecycle's record, and the seeded demo record.
-- `bash packages/contracts/scripts/integration.sh`: the real Base adapter against a local Hardhat node running the compiled contracts (signatures, USDC balances, records, replacement, payment evidence).
+- `bash packages/contracts/scripts/integration.sh`: the real Base adapter against a local Hardhat node running the compiled contracts (signatures, USDC balances, records, replacement, payment evidence), including a recording account that signs the way Key Vault does (digest in, raw signature out, normalised to Ethereum's low-s form).
 - `pnpm test:db`: row-level security and immutability on PostgreSQL.

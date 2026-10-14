@@ -6,7 +6,7 @@ import { MemoryRateLimitStore, type RateLimitPolicy, checkRateLimit } from "@sag
 import { globalSingleton } from "@sagolik/integrations";
 import { requestMeta, requireActor, supabaseForRequest } from "./session";
 
-/** Service context for the signed-in person. Reads go through RLS in Supabase mode. */
+/** Service context for the signed-in person. Reads go through RLS in Supabase and PostgreSQL modes. */
 export async function contextFor(actor: Actor): Promise<ServiceContext> {
   const rt = await getRuntime();
   const flags = await loadFlags(rt);
@@ -14,7 +14,9 @@ export async function contextFor(actor: Actor): Promise<ServiceContext> {
   let readerDb = rt.serviceDb;
   if (rt.mode === "supabase") {
     const sb = await supabaseForRequest();
-    if (sb) readerDb = createSupabaseDb(sb);
+    if (sb) readerDb = createSupabaseDb(sb, { person: true });
+  } else if (rt.readerFor) {
+    readerDb = rt.readerFor(actor.userId);
   }
   return userContext(rt, actor, { readerDb, flags, correlationId: meta.requestId });
 }

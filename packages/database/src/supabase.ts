@@ -12,7 +12,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { TABLE_SCHEMAS, type TableName } from "@sagolik/types";
 import { rowToCamel, rowToSnake, toSnake } from "./case";
-import { type Db, type FindOptions, NotFoundError, type Table, UniqueViolationError, type Where } from "./table";
+import { type Db, type FindOptions, NotFoundError, PERSON_HIDDEN_COLUMNS, type Table, UniqueViolationError, type Where } from "./table";
 
 interface PgError {
   code?: string;
@@ -50,11 +50,26 @@ function applyWhere<T>(q: FilterBuilder, where: Where<T> | undefined): FilterBui
   return q;
 }
 
+/** What a read selects: every column, or for a person every column they're allowed to read. */
+function selectList(name: TableName, person: boolean): string {
+  const hidden = person ? PERSON_HIDDEN_COLUMNS[name] : undefined;
+  if (!hidden?.length) return "*";
+  return Object.keys((TABLE_SCHEMAS[name] as unknown as { shape: Record<string, unknown> }).shape)
+    .map(toSnake)
+    .filter((c) => !hidden.includes(c))
+    .join(",");
+}
+
 class SupabaseTable<T extends { id: string }> implements Table<T> {
+  private readonly cols: string;
+
   constructor(
     private readonly client: SupabaseClient,
     private readonly name: TableName,
-  ) {}
+    person: boolean,
+  ) {
+    this.cols = selectList(name, person);
+  }
 
   private from() {
     return this.client.from(this.name) as unknown as {
@@ -65,13 +80,13 @@ class SupabaseTable<T extends { id: string }> implements Table<T> {
   }
 
   async get(id: string) {
-    const { data, error } = await this.from().select("*").eq("id", id).maybeSingle();
+    const { data, error } = await this.from().select(this.cols).eq("id", id).maybeSingle();
     if (error) raise(this.name, error);
     return data ? rowToCamel<T>(data) : null;
   }
 
   async find(where?: Where<T>, opts: FindOptions<T> = {}) {
-    let q = applyWhere(this.from().select("*"), where);
+    let q = applyWhere(this.from().select(this.cols), where);
     if (opts.orderBy) q = q.order(toSnake(opts.orderBy), { ascending: opts.ascending !== false });
     if (opts.limit !== undefined) q = q.limit(opts.limit);
     const { data, error } = await q;
@@ -91,7 +106,7 @@ class SupabaseTable<T extends { id: string }> implements Table<T> {
 
   async insert(row: T) {
     const parsed = TABLE_SCHEMAS[this.name].parse(row);
-    const { data, error } = await this.from().insert(rowToSnake(parsed as Record<string, unknown>)).select("*").single();
+    const { data, error } = await this.from().insert(rowToSnake(parsed as Record<string, unknown>)).select(this.cols).single();
     if (error) raise(this.name, error);
     return rowToCamel<T>(data!);
   }
@@ -107,7 +122,7 @@ class SupabaseTable<T extends { id: string }> implements Table<T> {
     const { data, error } = await this.from()
       .update(rowToSnake(patch as Record<string, unknown>))
       .eq("id", id)
-      .select("*")
+      .select(this.cols)
       .maybeSingle();
     if (error) raise(this.name, error);
     if (!data) throw new NotFoundError(this.name, id);
@@ -116,14 +131,15 @@ class SupabaseTable<T extends { id: string }> implements Table<T> {
 
   async updateIf(id: string, expected: Partial<T>, patch: Partial<T>) {
     const q = applyWhere(this.from().update(rowToSnake(patch as Record<string, unknown>)).eq("id", id), expected as Where<T>);
-    const { data, error } = await q.select("*").maybeSingle();
+    const { data, error } = await q.select(this.cols).maybeSingle();
     if (error) raise(this.name, error);
     return data ? rowToCamel<T>(data) : null;
   }
 }
 
-export function createSupabaseDb(client: SupabaseClient): Db {
+/** `person`: the client carries a person's session (reads under RLS), so columns hidden from people are left out. */
+export function createSupabaseDb(client: SupabaseClient, opts: { person?: boolean } = {}): Db {
   const db = {} as Record<TableName, Table<{ id: string }>>;
-  for (const name of Object.keys(TABLE_SCHEMAS) as TableName[]) db[name] = new SupabaseTable(client, name);
+  for (const name of Object.keys(TABLE_SCHEMAS) as TableName[]) db[name] = new SupabaseTable(client, name, opts.person ?? false);
   return db as unknown as Db;
 }

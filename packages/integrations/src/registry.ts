@@ -5,6 +5,7 @@
  */
 import type { Env } from "@sagolik/config";
 import type { Address, Hex } from "viem";
+import type { LocalAccount } from "viem/accounts";
 import type { WebhookCapable } from "./common";
 import { MockBankingProvider } from "./banking/mock";
 import { PlaidBankingProvider } from "./banking/plaid";
@@ -56,7 +57,12 @@ export interface Providers {
   };
 }
 
-export function createProviders(env: Env): Providers {
+export interface ProviderOptions {
+  /** The deal-record recording account when its key lives elsewhere (Key Vault's HSM) instead of CHAIN_RECORDER_KEY. */
+  chainRecorder?: LocalAccount;
+}
+
+export function createProviders(env: Env, opts: ProviderOptions = {}): Providers {
   const secret = env.MOCK_WEBHOOK_SECRET;
   const mocks: Providers["mocks"] = {};
 
@@ -98,6 +104,7 @@ export function createProviders(env: Env): Providers {
       rpcUrl: env.CHAIN_RPC_URL,
       registry: env.CHAIN_REGISTRY_ADDRESS as Address,
       recorderKey: env.CHAIN_RECORDER_KEY as Hex | undefined,
+      recorder: opts.chainRecorder,
       usdc: env.CHAIN_USDC_ADDRESS as Address | undefined,
     });
   }

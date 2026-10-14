@@ -14,6 +14,10 @@
     "@sagolik/types": "workspace:*",
     "@supabase/supabase-js": "^2.117.0",
     "@sagolik/auth": "workspace:*",
-    "@sagolik/workflow": "workspace:*"
+    "@sagolik/workflow": "workspace:*",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
   }
 }
