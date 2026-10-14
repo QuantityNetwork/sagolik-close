@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -281,4 +282,50 @@ func TestReplayGuard(t *testing.T) {
 	if n, err := s.PruneReplay(ctx, time.Now().Add(2*time.Minute)); err != nil || n != 1 {
 		t.Fatalf("prune: %d %v", n, err)
 	}
+}
+
+func TestOpenWithTokenSignsInWithAFreshToken(t *testing.T) {
+	url := os.Getenv("MONEY_TEST_DATABASE_URL")
+	if url == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("MONEY_TEST_DATABASE_URL must be set in CI")
+		}
+		t.Skip("MONEY_TEST_DATABASE_URL not set (run scripts/test-db.sh)")
+	}
+	ctx := context.Background()
+	var mu sync.Mutex
+	calls := 0
+	s, err := OpenWithToken(ctx, url, func(context.Context) (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		calls++
+		return "entra-access-token", nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if err := s.Ping(ctx); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	if calls == 0 {
+		t.Fatal("each new connection should ask for a token")
+	}
+	mu.Unlock()
+
+	// No token, no connection: the error says why.
+	_, err = OpenWithToken(ctx, url, func(context.Context) (string, error) { return "", errors.New("managed identity unavailable") })
+	if err == nil || !containsAll(err.Error(), "database access token", "managed identity unavailable") {
+		t.Fatalf("expected a token error, got %v", err)
+	}
+}
+
+func containsAll(s string, parts ...string) bool {
+	for _, p := range parts {
+		if !strings.Contains(s, p) {
+			return false
+		}
+	}
+	return true
 }

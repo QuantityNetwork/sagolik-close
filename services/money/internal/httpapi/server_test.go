@@ -227,3 +227,47 @@ func TestReadiness(t *testing.T) {
 		t.Fatal("liveness must not depend on dependencies")
 	}
 }
+
+// countingSealer seals and opens in memory, counting round-trips.
+type countingSealer struct {
+	trips int
+	fail  bool
+}
+
+func (c *countingSealer) Seal(_ context.Context, pt []byte, _ keys.Context) (string, error) {
+	c.trips++
+	if c.fail {
+		return "", errors.New("key vault unavailable")
+	}
+	return string(pt), nil
+}
+func (c *countingSealer) Open(_ context.Context, v string, _ keys.Context) ([]byte, error) {
+	return []byte(v), nil
+}
+
+func TestReadinessDoesNotHammerTheKeyService(t *testing.T) {
+	sealer := &countingSealer{}
+	srv := newServer(t, &fakeStore{}, sealer, newSigner(), nil)
+	now := time.Date(2026, 10, 14, 12, 0, 0, 0, time.UTC)
+	srv.Now = func() time.Time { return now }
+	h := srv.HealthHandler()
+	for i := 0; i < 5; i++ {
+		if rec, _ := do(h, "GET", "/readyz", ""); rec.Code != 200 {
+			t.Fatalf("ready: %d", rec.Code)
+		}
+	}
+	if sealer.trips != 1 {
+		t.Fatalf("a passing key check should be reused, got %d round-trips", sealer.trips)
+	}
+	// After the window, and on failure, it checks again (and never caches a failure).
+	now = now.Add(keyCheckTTL)
+	sealer.fail = true
+	for i := 0; i < 2; i++ {
+		if rec, _ := do(h, "GET", "/readyz", ""); rec.Code != 503 {
+			t.Fatalf("a failing key service must make the service not ready: %d", rec.Code)
+		}
+	}
+	if sealer.trips != 3 {
+		t.Fatalf("failures must be re-checked every time, got %d round-trips", sealer.trips)
+	}
+}

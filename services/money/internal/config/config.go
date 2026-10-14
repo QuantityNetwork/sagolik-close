@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/quantitynetwork/sagolik-close/services/money/internal/keys"
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/redact"
 )
 
@@ -20,6 +21,11 @@ type Config struct {
 
 	DatabaseURL    redact.Secret
 	MigrateOnStart bool
+	// DatabaseAuth "entra": sign in to Azure Database for PostgreSQL with the
+	// managed identity's Entra token (no password anywhere).
+	DatabaseAuth string // password | entra
+	// AzureClientID names the user-assigned managed identity (Azure only).
+	AzureClientID string
 
 	TLSCertFile     string
 	TLSKeyFile      string
@@ -27,9 +33,10 @@ type Config struct {
 	AllowedClients  []string
 	Plaintext       bool // local development only
 
-	KeyProvider                string // local | awskms
+	KeyProvider                string // local | awskms | azurekv
 	KeyringFile                string
 	KMSKeyID                   string
+	AzureKeyID                 string // https://<vault>.vault.azure.net/keys/<name>[/<version>]
 	AllowLocalKeysInProduction bool
 
 	AssertionJWKSFile string
@@ -65,6 +72,8 @@ func Load(getenv func(string) string) (Config, error) {
 		HealthAddr:                 get("MONEY_HEALTH_ADDR", "127.0.0.1:8081"),
 		DatabaseURL:                redact.NewSecret(get("MONEY_DATABASE_URL", "")),
 		MigrateOnStart:             get("MONEY_MIGRATE_ON_START", "false") == "true",
+		DatabaseAuth:               get("MONEY_DATABASE_AUTH", "password"),
+		AzureClientID:              get("AZURE_CLIENT_ID", ""),
 		TLSCertFile:                get("MONEY_TLS_CERT_FILE", ""),
 		TLSKeyFile:                 get("MONEY_TLS_KEY_FILE", ""),
 		TLSClientCAFile:            get("MONEY_TLS_CLIENT_CA_FILE", ""),
@@ -72,6 +81,7 @@ func Load(getenv func(string) string) (Config, error) {
 		KeyProvider:                get("MONEY_KEY_PROVIDER", "local"),
 		KeyringFile:                get("MONEY_LOCAL_KEYRING_FILE", ""),
 		KMSKeyID:                   get("MONEY_KMS_KEY_ID", ""),
+		AzureKeyID:                 get("MONEY_AZURE_KEY_ID", ""),
 		AllowLocalKeysInProduction: get("MONEY_ALLOW_LOCAL_KEYS_IN_PRODUCTION", "false") == "true",
 		AssertionJWKSFile:          get("MONEY_ASSERTION_JWKS_FILE", ""),
 		AssertionIssuer:            get("MONEY_ASSERTION_ISSUER", "sagolik-web"),
@@ -111,11 +121,19 @@ func (c Config) validate() error {
 	}
 	if c.DatabaseURL.IsZero() {
 		bad("MONEY_DATABASE_URL is required")
-	} else if c.Env != "local" {
+	} else {
 		u, err := url.Parse(c.DatabaseURL.Reveal())
-		if err != nil || u.Query().Get("sslmode") != "verify-full" {
+		if c.Env != "local" && (err != nil || u.Query().Get("sslmode") != "verify-full") {
 			bad("MONEY_DATABASE_URL must use sslmode=verify-full outside local development")
 		}
+		if err == nil && c.DatabaseAuth == "entra" && u.User != nil {
+			if _, hasPassword := u.User.Password(); hasPassword {
+				bad("with MONEY_DATABASE_AUTH=entra, MONEY_DATABASE_URL carries no password: the managed identity signs in")
+			}
+		}
+	}
+	if c.DatabaseAuth != "password" && c.DatabaseAuth != "entra" {
+		bad("MONEY_DATABASE_AUTH must be password or entra")
 	}
 	if c.Plaintext {
 		if c.Env != "local" {
@@ -135,14 +153,18 @@ func (c Config) validate() error {
 			bad("MONEY_LOCAL_KEYRING_FILE is required with MONEY_KEY_PROVIDER=local")
 		}
 		if c.Env == "production" && !c.AllowLocalKeysInProduction {
-			bad("production uses AWS KMS; set MONEY_ALLOW_LOCAL_KEYS_IN_PRODUCTION=true to accept file-based keys deliberately")
+			bad("production keeps its key-encryption key in an HSM (azurekv or awskms); set MONEY_ALLOW_LOCAL_KEYS_IN_PRODUCTION=true to accept file-based keys deliberately")
 		}
 	case "awskms":
 		if c.KMSKeyID == "" {
 			bad("MONEY_KMS_KEY_ID is required with MONEY_KEY_PROVIDER=awskms")
 		}
+	case "azurekv":
+		if _, _, _, err := keys.ParseKeyVaultKeyID(c.AzureKeyID); err != nil {
+			bad("MONEY_AZURE_KEY_ID must be a Key Vault key id (https://<vault>.vault.azure.net/keys/<name>) with MONEY_KEY_PROVIDER=azurekv")
+		}
 	default:
-		bad("MONEY_KEY_PROVIDER must be local or awskms")
+		bad("MONEY_KEY_PROVIDER must be local, awskms or azurekv")
 	}
 	if c.AssertionJWKSFile == "" {
 		bad("MONEY_ASSERTION_JWKS_FILE is required (the web app's public keys)")

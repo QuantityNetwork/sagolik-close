@@ -32,6 +32,25 @@ func Open(ctx context.Context, url string) (*Store, error) {
 	return OpenConfig(ctx, cfg)
 }
 
+// OpenWithToken connects with a fresh access token as the password of each
+// new connection: Azure Database for PostgreSQL with a managed identity's
+// Entra token, so no database password exists anywhere.
+func OpenWithToken(ctx context.Context, url string, token func(context.Context) (string, error)) (*Store, error) {
+	cfg, err := pgxpool.ParseConfig(url)
+	if err != nil {
+		return nil, fmt.Errorf("store: parse url: %w", err)
+	}
+	cfg.BeforeConnect = func(ctx context.Context, cc *pgx.ConnConfig) error {
+		t, err := token(ctx)
+		if err != nil {
+			return fmt.Errorf("store: database access token: %w", err)
+		}
+		cc.Password = t
+		return nil
+	}
+	return OpenConfig(ctx, cfg)
+}
+
 func OpenConfig(ctx context.Context, cfg *pgxpool.Config) (*Store, error) {
 	cfg.MaxConnLifetime = 30 * time.Minute
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)

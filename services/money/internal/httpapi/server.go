@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/assertion"
@@ -65,7 +66,14 @@ type Server struct {
 	Now        func() time.Time
 	CoolingOff time.Duration // waiting period for changed instructions (default 24h)
 	Bank       BankConfig
+
+	// A passing key round-trip is trusted for keyCheckTTL, so frequent
+	// readiness probes don't turn into a stream of HSM operations.
+	keyCheckMu sync.Mutex
+	keyCheckOK time.Time
 }
+
+const keyCheckTTL = 5 * time.Minute
 
 func (s *Server) now() time.Time {
 	if s.Now != nil {
@@ -113,13 +121,28 @@ func (s *Server) HealthHandler() http.Handler {
 			checks["database"], status = "unavailable", http.StatusServiceUnavailable
 			s.Log.Warn("readiness: database", "error", err)
 		}
-		if err := s.keySelfTest(ctx); err != nil {
+		if err := s.keysReady(ctx); err != nil {
 			checks["keys"], status = "unavailable", http.StatusServiceUnavailable
 			s.Log.Warn("readiness: keys", "error", err)
 		}
 		writeJSON(w, status, map[string]any{"status": map[bool]string{true: "ready", false: "not_ready"}[status == http.StatusOK], "checks": checks})
 	})
 	return mux
+}
+
+// keysReady runs the key self-test unless one passed within keyCheckTTL. Failures are never cached.
+func (s *Server) keysReady(ctx context.Context) error {
+	s.keyCheckMu.Lock()
+	defer s.keyCheckMu.Unlock()
+	if !s.keyCheckOK.IsZero() && s.now().Sub(s.keyCheckOK) < keyCheckTTL {
+		return nil
+	}
+	if err := s.keySelfTest(ctx); err != nil {
+		s.keyCheckOK = time.Time{}
+		return err
+	}
+	s.keyCheckOK = s.now()
+	return nil
 }
 
 // keySelfTest proves the configured key provider can wrap and unwrap.

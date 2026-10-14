@@ -15,6 +15,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azkeys"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
@@ -46,7 +50,13 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 	if err != nil {
 		return fmt.Errorf("configuration: %w", err)
 	}
-	provider, err := keyProvider(ctx, cfg)
+	var azure azcore.TokenCredential
+	if cfg.KeyProvider == "azurekv" || cfg.DatabaseAuth == "entra" {
+		if azure, err = azureCredential(cfg); err != nil {
+			return err
+		}
+	}
+	provider, err := keyProvider(ctx, cfg, azure)
 	if err != nil {
 		return err
 	}
@@ -54,7 +64,15 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 	if err != nil {
 		return err
 	}
-	st, err := store.Open(ctx, cfg.DatabaseURL.Reveal())
+	var st *store.Store
+	if cfg.DatabaseAuth == "entra" {
+		st, err = store.OpenWithToken(ctx, cfg.DatabaseURL.Reveal(), func(ctx context.Context) (string, error) {
+			tok, err := azure.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{postgresEntraScope}})
+			return tok.Token, err
+		})
+	} else {
+		st, err = store.Open(ctx, cfg.DatabaseURL.Reveal())
+	}
 	if err != nil {
 		return err
 	}
@@ -186,8 +204,33 @@ func bankConfig(cfg config.Config, getenv func(string) string) (httpapi.BankConf
 	}, nil
 }
 
-func keyProvider(ctx context.Context, cfg config.Config) (keys.Provider, error) {
+// postgresEntraScope is the audience of Entra tokens for Azure Database for PostgreSQL.
+const postgresEntraScope = "https://ossrdbms-aad.database.windows.net/.default"
+
+// azureCredential is the workload's user-assigned managed identity in Azure
+// (never a secret), or a developer's Azure CLI sign-in elsewhere.
+func azureCredential(cfg config.Config) (azcore.TokenCredential, error) {
+	if cfg.AzureClientID != "" {
+		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{ID: azidentity.ClientID(cfg.AzureClientID)})
+	}
+	if cfg.Env != "local" {
+		return nil, errors.New("AZURE_CLIENT_ID is required outside local development (the service's managed identity)")
+	}
+	return azidentity.NewAzureCLICredential(nil)
+}
+
+func keyProvider(ctx context.Context, cfg config.Config, azure azcore.TokenCredential) (keys.Provider, error) {
 	switch cfg.KeyProvider {
+	case "azurekv":
+		vault, _, _, err := keys.ParseKeyVaultKeyID(cfg.AzureKeyID)
+		if err != nil {
+			return nil, err
+		}
+		client, err := azkeys.NewClient(vault, azure, nil)
+		if err != nil {
+			return nil, fmt.Errorf("key vault client: %w", err)
+		}
+		return keys.NewAzureKeyVaultProvider(client, cfg.AzureKeyID)
 	case "awskms":
 		// Credentials come from the environment's IAM role (no static keys).
 		awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
