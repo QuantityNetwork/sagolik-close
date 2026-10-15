@@ -1,0 +1,79 @@
+// Starting detections for Microsoft Sentinel over the environment's Log
+// Analytics workspace. Create each as a scheduled analytics rule (Sentinel >
+// Analytics > Create > Scheduled query rule) once the first data has arrived:
+// Sentinel refuses a rule whose table doesn't exist yet, which is why these
+// aren't deployed with the infrastructure. Run each query by hand first; table
+// and column names follow Azure's resource-specific schemas.
+//
+// The app's audit events arrive as JSON log lines from the containers:
+//   {"level":"info","msg":"audit","audit":{"action":"…","actorId":"…","transactionId":"…",…}}
+// They carry ids and the action only, never names or contact details.
+
+// ---------------------------------------------------------------------------
+// Helper: the audit events (save as a workspace function named SagolikAudit).
+ContainerAppConsoleLogs
+| where Log has '"msg":"audit"'
+| extend e = parse_json(Log)
+| extend a = e.audit
+| project TimeGenerated, ContainerAppName, action = tostring(a.action), actorType = tostring(a.actorType), actorId = tostring(a.actorId),
+    transactionId = tostring(a.transactionId), organizationId = tostring(a.organizationId), resourceType = tostring(a.resourceType),
+    resourceId = tostring(a.resourceId), correlationId = tostring(a.correlationId);
+
+// ---------------------------------------------------------------------------
+// 1. Repeated failed step-up confirmations by one person (every 15 minutes, look back 15 minutes).
+//    A stolen session trying to confirm a money action.
+SagolikAudit
+| where action == "user.step_up_failed"
+| summarize failures = count(), first = min(TimeGenerated), last = max(TimeGenerated) by actorId
+| where failures >= 5;
+
+// ---------------------------------------------------------------------------
+// 2. Payment instructions created or a beneficiary changed (every 5 minutes, look back 5 minutes).
+//    The classic closing-fraud move; every one deserves a second look while the cooling-off period runs.
+SagolikAudit
+| where action in ("bank_instruction.created", "beneficiary.changed")
+| project TimeGenerated, action, actorId, transactionId, resourceId, correlationId;
+
+// ---------------------------------------------------------------------------
+// 3. One person downloading many documents (hourly, look back 1 hour). Possible exfiltration.
+SagolikAudit
+| where action == "document.downloaded"
+| summarize downloads = count(), transactions = dcount(transactionId) by actorId, bin(TimeGenerated, 1h)
+| where downloads > 50 or transactions > 10;
+
+// ---------------------------------------------------------------------------
+// 4. Webhooks rejected in bulk (every 15 minutes). Someone forging provider callbacks.
+SagolikAudit
+| where action == "webhook.rejected"
+| summarize rejected = count() by bin(TimeGenerated, 15m)
+| where rejected > 20;
+
+// ---------------------------------------------------------------------------
+// 5. Privileged access and feature-flag changes by administrators (every 5 minutes). Informational.
+SagolikAudit
+| where action in ("admin.privileged_access", "admin.feature_flag_changed")
+| project TimeGenerated, action, actorId, resourceType, resourceId, correlationId;
+
+// ---------------------------------------------------------------------------
+// 6. WAF blocks spiking from one client (every 5 minutes, look back 5 minutes).
+AzureDiagnostics
+| where Category == "FrontDoorWebApplicationFirewallLog" and action_s == "Block"
+| summarize blocks = count(), rules = make_set(ruleName_s, 10) by clientIP_s, bin(TimeGenerated, 5m)
+| where blocks > 100;
+
+// ---------------------------------------------------------------------------
+// 7. Key Vault refusing requests (every 15 minutes). An identity using a key or secret it has no
+//    right to, or something trying to reach the vault from outside.
+AZKVAuditLogs
+| where HttpStatusCode in (401, 403)
+| summarize refusals = count(), operations = make_set(OperationName, 10) by CallerIpAddress, bin(TimeGenerated, 15m)
+| where refusals > 5;
+
+// ---------------------------------------------------------------------------
+// 8. Deal-record entries failing (hourly). The worker logs a tick summary when entries move.
+ContainerAppConsoleLogs
+| where ContainerAppName == "worker" and Log has '"msg":"tick"'
+| extend r = parse_json(Log)
+| extend failed = toint(r.dealRecords.failed)
+| where failed > 0
+| project TimeGenerated, failed, Log;

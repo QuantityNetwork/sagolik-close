@@ -1,0 +1,202 @@
+name: Deploy to Azure
+
+# Deploys one environment, by hand, in the phases main.bicep describes:
+#   platform  the infrastructure only
+#   ceremony  + the images and the keys job, whose output the operator puts in Key Vault
+#   apps      + the apps, the database migrations and the Front Door routes (every release)
+# Signs in to Azure with OpenID Connect: no Azure credential is stored in GitHub.
+# Set up once per environment: docs/azure/runbook.md.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment
+        type: choice
+        options: [dev, prod]
+        required: true
+      phase:
+        description: Phase
+        type: choice
+        options: [platform, ceremony, apps]
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-azure-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    # Protection rules (required reviewers on azure-prod) and the identifiers below live on the GitHub environment.
+    environment: azure-${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write # OpenID Connect to Azure
+      attestations: write # signed build provenance for each image
+    env:
+      ENVIRONMENT: ${{ inputs.environment }}
+      PHASE: ${{ inputs.phase }}
+      LOCATION: ${{ vars.AZURE_LOCATION || 'eastus2' }}
+      DEPLOYER_PRINCIPAL_ID: ${{ vars.AZURE_DEPLOYER_PRINCIPAL_ID }}
+      TEMPLATE: infra/azure/main.bicep
+      PARAMETERS: infra/azure/params/${{ inputs.environment }}.bicepparam
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Azure CLI tools
+        run: |
+          az bicep install --version v0.48.1
+          az extension add --name containerapp --upgrade --only-show-errors
+
+      - name: Platform
+        if: inputs.phase == 'platform'
+        env:
+          DEPLOY_PHASE: platform
+        run: |
+          az deployment sub what-if --location "$LOCATION" --name "sagolik-$ENVIRONMENT" --template-file "$TEMPLATE" --parameters "$PARAMETERS"
+          az deployment sub create --location "$LOCATION" --name "sagolik-$ENVIRONMENT" --template-file "$TEMPLATE" --parameters "$PARAMETERS" --output none
+          az deployment sub show --name "sagolik-$ENVIRONMENT" --query properties.outputs -o json > outputs.json
+          jq -r 'to_entries[] | "\(.key): \(.value.value)"' outputs.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Read the platform's outputs
+        if: inputs.phase != 'platform'
+        run: |
+          az deployment sub show --name "sagolik-$ENVIRONMENT" --query properties.outputs -o json > outputs.json \
+            || { echo "::error::Run the platform phase first."; exit 1; }
+          out() { jq -r --arg k "$1" '.[$k].value' outputs.json; }
+          {
+            echo "RESOURCE_GROUP=$(out resourceGroup)"
+            echo "REGISTRY=$(out registry)"
+            echo "APP_HOST=$(out appHost)"
+          } >> "$GITHUB_ENV"
+
+      # The registry accepts no public traffic; this runner's address is allowed only while it pushes.
+      - name: Open the registry to this runner
+        if: inputs.phase != 'platform'
+        run: |
+          ip="$(curl -fsS https://api.ipify.org)"
+          echo "RUNNER_IP=$ip" >> "$GITHUB_ENV"
+          az acr network-rule add --name "${REGISTRY%%.*}" --ip-address "$ip" --output none
+          for i in $(seq 1 20); do az acr login --name "${REGISTRY%%.*}" && break; sleep 15; done
+
+      - name: Build and push the images
+        if: inputs.phase != 'platform'
+        id: images
+        run: |
+          set -euo pipefail
+          build() { # <name> <context> [target]
+            local ref="$REGISTRY/sagolik-$1:$GITHUB_SHA"
+            docker build ${3:+--target "$3"} --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$ref" "$2"
+            docker push "$ref" >/dev/null
+            local digest; digest="$(docker inspect --format '{{index .RepoDigests 0}}' "$ref")"
+            echo "$1=${digest#*@}" >> "$GITHUB_OUTPUT"
+            echo "$(tr '[:lower:]-' '[:upper:]_' <<<"$1")_IMAGE=$digest" >> "$GITHUB_ENV"
+          }
+          build web . web
+          build worker . worker
+          build money services/money
+
+      - uses: actions/attest-build-provenance@v2
+        if: inputs.phase != 'platform'
+        with:
+          subject-name: ${{ env.REGISTRY }}/sagolik-web
+          subject-digest: ${{ steps.images.outputs.web }}
+          push-to-registry: true
+      - uses: actions/attest-build-provenance@v2
+        if: inputs.phase != 'platform'
+        with:
+          subject-name: ${{ env.REGISTRY }}/sagolik-worker
+          subject-digest: ${{ steps.images.outputs.worker }}
+          push-to-registry: true
+      - uses: actions/attest-build-provenance@v2
+        if: inputs.phase != 'platform'
+        with:
+          subject-name: ${{ env.REGISTRY }}/sagolik-money
+          subject-digest: ${{ steps.images.outputs.money }}
+          push-to-registry: true
+
+      - name: Close the registry again
+        if: always() && env.RUNNER_IP != ''
+        run: az acr network-rule remove --name "${REGISTRY%%.*}" --ip-address "$RUNNER_IP" --output none
+
+      - name: Deploy (${{ inputs.phase }})
+        if: inputs.phase != 'platform'
+        env:
+          DEPLOY_PHASE: ${{ inputs.phase }}
+        run: |
+          az deployment sub what-if --location "$LOCATION" --name "sagolik-$ENVIRONMENT-$PHASE" --template-file "$TEMPLATE" --parameters "$PARAMETERS"
+          az deployment sub create --location "$LOCATION" --name "sagolik-$ENVIRONMENT-$PHASE" --template-file "$TEMPLATE" --parameters "$PARAMETERS" --output none
+          az deployment sub show --name "sagolik-$ENVIRONMENT-$PHASE" --query properties.outputs -o json > outputs.json
+
+      - name: Key ceremony
+        if: inputs.phase == 'ceremony'
+        run: |
+          set -euo pipefail
+          run="$(az containerapp job start --name keys --resource-group "$RESOURCE_GROUP" --query name -o tsv)"
+          for i in $(seq 1 60); do
+            status="$(az containerapp job execution show --name keys --resource-group "$RESOURCE_GROUP" --job-execution-name "$run" --query properties.status -o tsv)"
+            [ "$status" = "Running" ] || [ "$status" = "Processing" ] || break
+            sleep 10
+          done
+          echo "Keys job: $status"
+          [ "$status" = "Succeeded" ]
+          {
+            echo "## Key ceremony"
+            echo "Public material only. Put it in Key Vault with infra/azure/scripts/set-secrets.sh (docs/azure/runbook.md)."
+            echo '```'
+            az containerapp job logs show --name keys --resource-group "$RESOURCE_GROUP" --execution "$run" --container keys --format text 2>/dev/null \
+              | grep '"key ceremony"' || echo "(the log isn't available yet: read execution $run in the portal or Log Analytics)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Only Front Door's own requests: they carry a message derived from the profile's (non-public) id.
+      - name: Approve Front Door's Private Link connections
+        if: inputs.phase == 'apps'
+        run: |
+          set -euo pipefail
+          message="$(jq -r '.privateLinkRequestMessage.value' outputs.json)"
+          for env in $(jq -r '.coreEnvironmentId.value, .moneyEnvironmentId.value | select(. != "")' outputs.json); do
+            az rest --method get --url "https://management.azure.com$env/privateEndpointConnections?api-version=2025-07-01" -o json \
+              | jq -r --arg m "$message" '.value[] | select(.properties.privateLinkServiceConnectionState.status == "Pending" and .properties.privateLinkServiceConnectionState.description == $m) | .id' \
+              | while read -r id; do
+                  az rest --method put --url "https://management.azure.com$id?api-version=2025-07-01" --output none \
+                    --body '{"properties":{"privateLinkServiceConnectionState":{"status":"Approved","description":"Approved by the deploy pipeline"}}}'
+                  echo "Approved $id"
+                done
+          done
+
+      - name: Migrate the databases
+        if: inputs.phase == 'apps'
+        run: |
+          set -euo pipefail
+          for job in $(jq -r '.migrateJob.value, .moneyMigrateJob.value | select(. != "")' outputs.json); do
+            run="$(az containerapp job start --name "$job" --resource-group "$RESOURCE_GROUP" --query name -o tsv)"
+            for i in $(seq 1 120); do
+              status="$(az containerapp job execution show --name "$job" --resource-group "$RESOURCE_GROUP" --job-execution-name "$run" --query properties.status -o tsv)"
+              [ "$status" = "Running" ] || [ "$status" = "Processing" ] || break
+              sleep 10
+            done
+            echo "$job: $status"
+            [ "$status" = "Succeeded" ]
+          done
+
+      - name: Smoke test through Front Door
+        if: inputs.phase == 'apps'
+        run: |
+          # Route and Private Link changes take a few minutes to reach every edge.
+          for i in $(seq 1 60); do
+            if body="$(curl -fsS "https://$APP_HOST/api/health")" && jq -e '.status == "ok" and .mode == "postgres"' <<<"$body" >/dev/null; then
+              echo "$body"; echo "Live at https://$APP_HOST" >> "$GITHUB_STEP_SUMMARY"; exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::https://$APP_HOST/api/health didn't answer as expected"; exit 1

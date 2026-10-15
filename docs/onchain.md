@@ -113,7 +113,7 @@ USDC contracts: Base `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`, Base Sepolia 
 | `CHAIN_NETWORK` | `off`, `sandbox` (in-memory demo chain), `base-sepolia`, `base` or `local`. Default: `sandbox` in demo mode, otherwise `off`. Production allows only `base` or `off`. |
 | `CHAIN_REGISTRY_ADDRESS` | The deployed registry. Required for live networks. |
 | `CHAIN_DEAL_SALT` | Secret (≥32 characters) that makes deal ids unlinkable. Required for live networks. **Keep it stable:** changing it starts a new deal id for every closing. |
-| `CHAIN_RECORDER_KEY_ID` | The recording account's key in Azure Key Vault: an HSM-backed EC key on curve P-256K (secp256k1). Key Vault signs each entry; the key never leaves the HSM, and the recording account is its address. Required in production. Set it where entries are sent (the worker). Without a recording key, entries wait in the queue. |
+| `CHAIN_RECORDER_KEY_ID` | The recording account's key in Azure Key Vault, with its version: an HSM-backed EC key on curve P-256K (secp256k1). Key Vault signs each entry; the key never leaves the HSM, and the recording account is its address (which is why the version is pinned). Required in production. Set it where entries are sent (the worker). Without a recording key, entries wait in the queue. |
 | `CHAIN_RECORDER_KEY` | Test networks only: the recording account's private key (`RECORDER_ROLE` only). Refused in production. |
 | `CHAIN_RPC_URL` | JSON-RPC endpoint (https). Defaults to the public Base endpoint, which is rate-limited; use a provider in production. |
 | `CHAIN_USDC_ADDRESS` | Local test networks only. |
@@ -127,9 +127,9 @@ Deployment is signed by the treasury wallet (for example in PayBox). No private 
 ```bash
 pnpm --filter @sagolik/contracts build
 cd packages/contracts
-# 1. A recording account for the service: a key generated inside Key Vault's HSM. Only its address leaves the vault:
-#      az keyvault key create --vault-name <vault> --name chain-recorder --kty EC-HSM --curve P-256K --ops sign verify
-#      pnpm --filter @sagolik/worker keys recorder-address https://<vault>.vault.azure.net/keys/chain-recorder
+# 1. A recording account for the service: on Azure, the infrastructure creates the key inside Key Vault's HSM
+#    (chain-recorder in the core vault), and the key ceremony prints its address and versioned id
+#    (docs/azure/runbook.md). Only the address ever leaves the vault.
 # 2. Build the unsigned deployment transaction (prints the transaction, the future contract address and the most it can cost).
 node --experimental-strip-types scripts/deploy-tx.ts --network base-sepolia --admin <treasury address> --recorder <recorder address>
 # 3. Sign that transaction with the treasury wallet. 4. Send it and check the roles:

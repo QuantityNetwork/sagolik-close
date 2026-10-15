@@ -52,6 +52,58 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql
       - run: bash scripts/postgres-it.sh
 
+  infra:
+    # The Azure infrastructure: compiles with no warnings, passes the linter's strict rules
+    # (bicepconfig.json), and Checkov on the compiled templates (skips explained in .checkov.yaml).
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: infra/azure
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bicep CLI
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$HOME/.local/bin/bicep" https://github.com/Azure/bicep/releases/download/v0.48.1/bicep-linux-x64
+          chmod +x "$HOME/.local/bin/bicep"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Build and lint (any warning fails)
+        run: |
+          set -o pipefail
+          mkdir -p out
+          for f in main.bicep secrets.bicep; do bicep build "$f" --outdir out 2>&1 | tee -a build.log; bicep lint "$f" 2>&1 | tee -a build.log; done
+          for f in modules/*.bicep; do bicep lint "$f" 2>&1 | tee -a build.log; done
+          for p in params/*.bicepparam; do DEPLOY_PHASE=apps bicep build-params "$p" --outfile "out/$(basename "$p" .bicepparam).parameters.json" 2>&1 | tee -a build.log; done
+          if grep -E "Warning|Error" build.log; then exit 1; fi
+      - name: Checkov
+        run: |
+          python3 -m venv "$RUNNER_TEMP/checkov"
+          "$RUNNER_TEMP/checkov/bin/pip" install --quiet checkov==3.3.29
+          "$RUNNER_TEMP/checkov/bin/checkov" -d out --framework arm --config-file .checkov.yaml --compact --quiet
+
+  images:
+    # The three images build, and the web image serves its health check, so a broken Dockerfile
+    # shows up here rather than in a deployment.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Web
+        run: docker build --target web -t sagolik-web:ci .
+      - name: Worker (and the migrate and keys jobs)
+        run: docker build --target worker -t sagolik-worker:ci .
+      - name: Money service
+        run: docker build -t sagolik-money:ci services/money
+      - name: Web image serves
+        run: |
+          docker run -d --name web -p 3000:3000 -e APP_ENV=staging -e DEMO_MODE=true -e SESSION_SECRET="$(openssl rand -hex 32)" -e APP_URL=http://localhost:3000 sagolik-web:ci
+          for i in $(seq 1 60); do curl -sf http://localhost:3000/api/health && exit 0; sleep 1; done
+          docker logs web; exit 1
+      - name: Worker image runs its commands
+        run: |
+          out="$(docker run --rm sagolik-worker:ci node --import tsx apps/worker/src/keys.ts 2>&1 || true)"
+          grep -q "usage: keys" <<<"$out"
+          docker run --rm sagolik-money:ci migrate -h
+
   e2e:
     runs-on: ubuntu-24.04
     steps:

@@ -42,7 +42,7 @@ The important part is the **isolation**. A compromise of the web app must not ex
 ```
 Browser ─▶ Next.js web app (public) ── mTLS, signed user assertion ──▶ Go money service (private subnet)
                │  masked projections only                                   │  own Postgres DB + role
-               ▼                                                            ├─▶ AWS KMS (envelope encryption)
+               ▼                                                            ├─▶ Key Vault HSM (envelope encryption)
           App Postgres (Supabase)  ◀── outbox events (masked) ──────────────┤
                                                                             ├─▶ Plaid (Auth, Identity, Balance)
 Provider webhooks ─▶ WAF/edge ─▶ /webhooks/* on the money service ──────────┤─▶ Escrow partner / title production system
@@ -65,11 +65,11 @@ Provider webhooks ─▶ WAF/edge ─▶ /webhooks/* on the money service ──
 
 ## 4. Keys and secrets
 
-- **Envelope encryption with AWS KMS**, backed by FIPS 140-validated HSMs.
+- **Envelope encryption with an HSM-held key**: Azure Key Vault Premium on the target platform ([azure/architecture.md](azure/architecture.md)); AWS KMS is supported too.
   - Every sensitive record (a Plaid access token, a full account number) gets its own data key.
-  - The data key is stored wrapped by a KMS key that only the money service's IAM role can use.
-- **No secrets in environment variables.** Provider credentials sit in AWS Secrets Manager, can be read only by the service role, are rotated, and every read is logged in CloudTrail.
-- **Separate KMS keys** per environment and per data class: tokens, account numbers, signing keys.
+  - The data key is stored wrapped by a key that only the money service's own identity can use (on Azure, its managed identity; the key never leaves the HSM).
+- **No secrets in environment variables.** Provider credentials sit in the money service's own Key Vault, can be read only by its identity, and every read is logged.
+- **Separate keys** per environment, in a vault of the money service's own.
 - The signing keys for user assertions belong to the web app; the money service holds only the public keys, and rotates them through a published key set (JWKS).
 - **Break-glass access** requires two people and is time-boxed and audited.
 
@@ -117,11 +117,11 @@ POST /webhooks/{provider}
 - **Language and dependencies:** Go 1.24+ and `go.mod` with the fewest dependencies possible.
 - **CI checks:** `govulncheck`, `gosec` and `staticcheck` gate every pull request. Tests run with the race detector and against real Postgres.
 - **Images:**
-  - built reproducibly with `-trimpath`, on a distroless base, running as non-root with a read-only filesystem
-  - shipped with an SBOM and signed with cosign
+  - built reproducibly with `-trimpath`, on a distroless base, running as non-root; the binary writes nothing to disk
+  - deployed by digest, with a signed build-provenance attestation
 - **Runtime:**
   - a private subnet with no public ingress, except webhook routes through the WAF
-  - outbound traffic allowed only to Plaid, the escrow partner, KMS and Secrets Manager
+  - outbound traffic allowed only to Plaid and the escrow partner (Key Vault and the database are private endpoints)
 - **Observability:** structured logs that redact sensitive fields by type, not by convention. Traces carry the web app's correlation id.
 - **Reconciliation job:** every night, compare the ledger's expected and received amounts with the escrow partner's reports, and alert on any mismatch.
 
@@ -182,7 +182,7 @@ The rules already exist in `packages/core/src/services/{banking,payments,escrow}
 | --- | --- |
 | First market | United States |
 | Custody | None: orchestration only |
-| Cloud for the money service | AWS (KMS/HSM, Secrets Manager, private networking) |
+| Cloud for the money service | Microsoft Azure, with the whole platform (Key Vault HSM, private networking, Entra identities); see [azure/architecture.md](azure/architecture.md) |
 | First escrow/title partner | Fidelity National Financial, through SoftPro |
 | Wire-fraud verification provider | Open: choose alongside the FNF conversation |
 | Bank data provider | Plaid (Hosted Link; Identity + Balance only) |

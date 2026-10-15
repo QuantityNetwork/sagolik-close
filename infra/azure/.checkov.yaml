@@ -1,0 +1,20 @@
+# Checkov runs on the compiled template (main.json) in CI. These checks are
+# skipped deliberately, each for the reason given; any other finding fails.
+skip-check:
+  # Evaluated from parameters Checkov can't resolve in the compiled template:
+  # every key is RSA-HSM or EC-HSM, storage is ZRS or GZRS, and the account
+  # name is generated within Azure's naming rules.
+  - CKV_AZURE_112
+  - CKV_AZURE_206
+  - CKV_AZURE_43
+  # No expiry on the key-encryption keys and the recording key: wrapping data
+  # keys and signing deal-record entries must never stop on a date. They are
+  # rotated by a ceremony instead (new version, re-wrap), docs/azure/runbook.md.
+  - CKV_AZURE_40
+  # Registry quarantine needs a third-party scanner to release each image;
+  # Microsoft Defender for Containers scans the registry instead.
+  - CKV_AZURE_166
+  # The registry denies public traffic by default with no standing rules; the
+  # deploy pipeline adds its own runner's address only for the length of a push
+  # (hosted runners can't reach the private endpoint). Pulls stay private.
+  - CKV_AZURE_139
