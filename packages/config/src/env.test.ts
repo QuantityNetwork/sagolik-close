@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseEnv } from "./env";
+import { parseDatabaseEnv, parseEnv } from "./env";
 
 describe("environment", () => {
   it("runs locally with no configuration, in demo mode", () => {
@@ -32,8 +32,10 @@ describe("environment", () => {
   });
 
   it("takes data keys in clear or wrapped by a Key Vault key, never both", () => {
-    const kek = "https://kv-core.vault.azure.net/keys/data-kek";
+    const kek = "https://kv-core.vault.azure.net/keys/data-kek/0123456789abcdef0123456789abcdef";
     expect(parseEnv({ DATA_KEYS_WRAPPED: "v1:abc", DATA_KEK_ID: kek }).DATA_KEK_ID).toBe(kek);
+    // The version that wrapped them is required, so rotating the key can't break unwrapping.
+    expect(() => parseEnv({ DATA_KEYS_WRAPPED: "v1:abc", DATA_KEK_ID: "https://kv-core.vault.azure.net/keys/data-kek" })).toThrow(/version/);
     expect(() => parseEnv({ DATA_KEYS_WRAPPED: "v1:abc" })).toThrow(/DATA_KEK_ID/);
     expect(() => parseEnv({ DATA_KEYS_WRAPPED: "v1:abc", DATA_KEK_ID: kek, DATA_ENCRYPTION_KEYS: "v1:x" })).toThrow(/not both/);
     expect(() => parseEnv({ DATA_KEYS_WRAPPED: "v1:abc", DATA_KEK_ID: "https://evil.example/keys/data-kek" })).toThrow(/Key Vault key id/);
@@ -43,8 +45,10 @@ describe("environment", () => {
     const prod = { APP_ENV: "production", SESSION_SECRET: "x".repeat(32), NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co", NEXT_PUBLIC_SUPABASE_ANON_KEY: "a", SUPABASE_SERVICE_ROLE_KEY: "s", DATA_ENCRYPTION_KEYS: "v1:x" };
     const live = { ...prod, CHAIN_NETWORK: "base", CHAIN_REGISTRY_ADDRESS: `0x${"ab".repeat(20)}`, CHAIN_DEAL_SALT: "s".repeat(32) };
     expect(() => parseEnv({ ...live, CHAIN_RECORDER_KEY: `0x${"11".repeat(32)}` })).toThrow(/CHAIN_RECORDER_KEY_ID instead/);
-    expect(parseEnv({ ...live, CHAIN_RECORDER_KEY_ID: "https://kv-core.vault.azure.net/keys/chain-recorder" }).chainNetwork).toBe("base");
+    expect(parseEnv({ ...live, CHAIN_RECORDER_KEY_ID: "https://kv-core.vault.azure.net/keys/chain-recorder/0123456789abcdef0123456789abcdef" }).chainNetwork).toBe("base");
     expect(() => parseEnv({ ...live, CHAIN_RECORDER_KEY_ID: "chain-recorder" })).toThrow(/Key Vault key id/);
+    // The address depends on the exact key version.
+    expect(() => parseEnv({ ...live, CHAIN_RECORDER_KEY_ID: "https://kv-core.vault.azure.net/keys/chain-recorder" })).toThrow(/version/);
   });
 
   it("connects to PostgreSQL directly only over verified TLS, with durable document storage", () => {
@@ -60,6 +64,13 @@ describe("environment", () => {
     expect(parseEnv({ DATABASE_URL: "postgres://postgres:postgres@127.0.0.1:5432/close" }).demoMode).toBe(true);
     // Production on PostgreSQL waits for real sign-in.
     expect(() => parseEnv({ ...staging, APP_ENV: "production", DEMO_MODE: undefined, DATA_ENCRYPTION_KEYS: "v1:x", DATABASE_URL: url })).toThrow(/Microsoft Entra/);
+  });
+
+  it("lets the migrate command run with database settings only, even in production", () => {
+    const url = "postgres://id-migrate@psql-sagolik-prod.postgres.database.azure.com:5432/close?sslmode=verify-full";
+    expect(parseDatabaseEnv({ APP_ENV: "production", DATABASE_URL: url, DATABASE_AUTH: "entra", AZURE_CLIENT_ID: "c" }).DATABASE_URL).toBe(url);
+    expect(() => parseDatabaseEnv({ APP_ENV: "production" })).toThrow(/DATABASE_URL/);
+    expect(() => parseDatabaseEnv({ APP_ENV: "production", DATABASE_URL: url.replace("verify-full", "disable") })).toThrow(/verify-full/);
   });
 
   it("keeps Plaid sandbox keys out of production", () => {

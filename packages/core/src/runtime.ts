@@ -65,7 +65,7 @@ type AzureGlue = { azure: typeof import("@sagolik/azure"); credential: import("@
 let azureGlue: Promise<AzureGlue> | null = null;
 
 /** Azure SDK glue, loaded only when an Azure setting asks for it. One credential per process, so tokens are cached. */
-export function azureFor(env: Env): Promise<AzureGlue> {
+export function azureFor(env: Pick<Env, "AZURE_CLIENT_ID">): Promise<AzureGlue> {
   azureGlue ??= import("@sagolik/azure").then((azure) => ({ azure, credential: azure.azureCredential(env.AZURE_CLIENT_ID) }));
   return azureGlue;
 }
@@ -81,7 +81,7 @@ export async function loadKeyRing(env: Env): Promise<KeyRing> {
 }
 
 /** A pool for DATABASE_URL; with DATABASE_AUTH=entra each new connection signs in with a fresh Entra token. */
-export async function postgresPoolFor(env: Env, connectionString = env.DATABASE_URL) {
+export async function postgresPoolFor(env: Pick<Env, "DATABASE_URL" | "DATABASE_AUTH" | "AZURE_CLIENT_ID">, connectionString = env.DATABASE_URL) {
   if (!connectionString) throw new Error("DATABASE_URL isn't set.");
   const password = env.DATABASE_AUTH === "entra" ? await azureFor(env).then(({ azure, credential }) => azure.entraPostgresPassword(credential)) : undefined;
   return createPostgresPool({ connectionString, password });

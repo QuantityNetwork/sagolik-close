@@ -36,6 +36,13 @@ func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})).With("service", "money")
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		if err := runMigrate(ctx, os.Getenv, os.Args[2:], log); err != nil {
+			log.Error("migrate", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := run(ctx, os.Getenv, log, nil); err != nil {
 		log.Error("fatal", "error", err)
 		os.Exit(1)
@@ -51,8 +58,8 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 		return fmt.Errorf("configuration: %w", err)
 	}
 	var azure azcore.TokenCredential
-	if cfg.KeyProvider == "azurekv" || cfg.DatabaseAuth == "entra" {
-		if azure, err = azureCredential(cfg); err != nil {
+	if cfg.KeyProvider == "azurekv" {
+		if azure, err = azureCredential(cfg.Database); err != nil {
 			return err
 		}
 	}
@@ -64,15 +71,7 @@ func run(ctx context.Context, getenv func(string) string, log *slog.Logger, read
 	if err != nil {
 		return err
 	}
-	var st *store.Store
-	if cfg.DatabaseAuth == "entra" {
-		st, err = store.OpenWithToken(ctx, cfg.DatabaseURL.Reveal(), func(ctx context.Context) (string, error) {
-			tok, err := azure.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{postgresEntraScope}})
-			return tok.Token, err
-		})
-	} else {
-		st, err = store.Open(ctx, cfg.DatabaseURL.Reveal())
-	}
+	st, err := openStore(ctx, cfg.Database, cfg.DatabaseURL.Reveal())
 	if err != nil {
 		return err
 	}
@@ -209,14 +208,29 @@ const postgresEntraScope = "https://ossrdbms-aad.database.windows.net/.default"
 
 // azureCredential is the workload's user-assigned managed identity in Azure
 // (never a secret), or a developer's Azure CLI sign-in elsewhere.
-func azureCredential(cfg config.Config) (azcore.TokenCredential, error) {
-	if cfg.AzureClientID != "" {
-		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{ID: azidentity.ClientID(cfg.AzureClientID)})
+func azureCredential(db config.Database) (azcore.TokenCredential, error) {
+	if db.AzureClientID != "" {
+		return azidentity.NewManagedIdentityCredential(&azidentity.ManagedIdentityCredentialOptions{ID: azidentity.ClientID(db.AzureClientID)})
 	}
-	if cfg.Env != "local" {
+	if db.Env != "local" {
 		return nil, errors.New("AZURE_CLIENT_ID is required outside local development (the service's managed identity)")
 	}
 	return azidentity.NewAzureCLICredential(nil)
+}
+
+// openStore connects with a password in the URL, or with Entra tokens from the managed identity.
+func openStore(ctx context.Context, db config.Database, url string) (*store.Store, error) {
+	if db.DatabaseAuth != "entra" {
+		return store.Open(ctx, url)
+	}
+	cred, err := azureCredential(db)
+	if err != nil {
+		return nil, err
+	}
+	return store.OpenWithToken(ctx, url, func(ctx context.Context) (string, error) {
+		tok, err := cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{postgresEntraScope}})
+		return tok.Token, err
+	})
 }
 
 func keyProvider(ctx context.Context, cfg config.Config, azure azcore.TokenCredential) (keys.Provider, error) {

@@ -7,3 +7,18 @@
 apps/web/test-results
 apps/web/playwright-report
 *.tsbuildinfo
+
+# Not part of either image
+.github
+.tmp
+docs
+services
+supabase/tests
+supabase/seed.sql
+apps/web/e2e
+packages/contracts/artifacts
+packages/contracts/cache
+infra/azure/modules
+infra/azure/params
+infra/azure/*.bicep
+infra/azure/*.json

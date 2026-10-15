@@ -21,7 +21,7 @@ export interface AuditInput {
 
 export async function audit(ctx: ServiceContext, input: AuditInput): Promise<void> {
   const a = ctx.actor;
-  await ctx.writer.audit_events.insert({
+  const row = await ctx.writer.audit_events.insert({
     id: crypto.randomUUID(),
     organizationId: input.organizationId ?? null,
     transactionId: input.transactionId ?? null,
@@ -35,6 +35,22 @@ export async function audit(ctx: ServiceContext, input: AuditInput): Promise<voi
     userAgent: isUser(a) ? a.userAgent : null,
     metadata: { ...(input.metadata ?? {}), ...(isUser(a) ? {} : { systemSource: a.source }) },
     correlationId: ctx.correlationId,
+  });
+  // The same event as one structured log line, for the SIEM (Microsoft Sentinel). Ids and the action only:
+  // no names, contact details, addresses, user agents or metadata.
+  ctx.log.info("audit", {
+    audit: {
+      id: row.id,
+      action: row.action,
+      resourceType: row.resourceType,
+      resourceId: row.resourceId,
+      transactionId: row.transactionId,
+      organizationId: row.organizationId,
+      actorType: row.actorType,
+      actorId: row.actorId,
+      occurredAt: row.occurredAt,
+      correlationId: row.correlationId,
+    },
   });
 }
 

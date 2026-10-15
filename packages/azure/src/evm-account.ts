@@ -34,6 +34,8 @@ const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 export interface Secp256k1Signer {
   /** Uncompressed public key: 0x04 || x || y. */
   publicKey: Hex;
+  /** The exact key version that signs (Key Vault keys). */
+  keyId?: string;
   /** Signs a 32-byte digest as-is and returns r || s (64 bytes), like Key Vault's ES256K. */
   signDigest(digest: Uint8Array): Promise<Uint8Array>;
 }
@@ -52,6 +54,7 @@ export async function keyVaultSecp256k1Signer(keyId: string, credential: TokenCr
   const crypto = new CryptographyClient(key.id ?? keyId, credential);
   return {
     publicKey: bytesToHex(new Uint8Array([4, ...jwk.x, ...jwk.y])),
+    keyId: key.id,
     signDigest: async (digest) => (await crypto.sign("ES256K", digest)).result,
   };
 }

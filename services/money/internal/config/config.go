@@ -14,18 +14,23 @@ import (
 	"github.com/quantitynetwork/sagolik-close/services/money/internal/redact"
 )
 
-type Config struct {
-	Env        string // local | staging | production
-	ListenAddr string // internal API (mTLS)
-	HealthAddr string // plaintext liveness/readiness, bind to a private interface
-
-	DatabaseURL    redact.Secret
-	MigrateOnStart bool
+// Database is what connecting to the money database takes; `money migrate` needs only this.
+type Database struct {
+	Env         string // local | staging | production
+	DatabaseURL redact.Secret
 	// DatabaseAuth "entra": sign in to Azure Database for PostgreSQL with the
 	// managed identity's Entra token (no password anywhere).
 	DatabaseAuth string // password | entra
 	// AzureClientID names the user-assigned managed identity (Azure only).
 	AzureClientID string
+}
+
+type Config struct {
+	Database
+	ListenAddr string // internal API (mTLS)
+	HealthAddr string // plaintext liveness/readiness, bind to a private interface
+
+	MigrateOnStart bool
 
 	TLSCertFile     string
 	TLSKeyFile      string
@@ -67,13 +72,10 @@ func Load(getenv func(string) string) (Config, error) {
 		return def
 	}
 	c := Config{
-		Env:                        get("MONEY_ENV", "local"),
+		Database:                   loadDatabase(get),
 		ListenAddr:                 get("MONEY_LISTEN_ADDR", ":8443"),
 		HealthAddr:                 get("MONEY_HEALTH_ADDR", "127.0.0.1:8081"),
-		DatabaseURL:                redact.NewSecret(get("MONEY_DATABASE_URL", "")),
 		MigrateOnStart:             get("MONEY_MIGRATE_ON_START", "false") == "true",
-		DatabaseAuth:               get("MONEY_DATABASE_AUTH", "password"),
-		AzureClientID:              get("AZURE_CLIENT_ID", ""),
 		TLSCertFile:                get("MONEY_TLS_CERT_FILE", ""),
 		TLSKeyFile:                 get("MONEY_TLS_KEY_FILE", ""),
 		TLSClientCAFile:            get("MONEY_TLS_CLIENT_CA_FILE", ""),
@@ -112,29 +114,58 @@ func Load(getenv func(string) string) (Config, error) {
 	return c, c.validate()
 }
 
-func (c Config) validate() error {
-	var errs []error
-	bad := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
+func loadDatabase(get func(k, def string) string) Database {
+	return Database{
+		Env:           get("MONEY_ENV", "local"),
+		DatabaseURL:   redact.NewSecret(get("MONEY_DATABASE_URL", "")),
+		DatabaseAuth:  get("MONEY_DATABASE_AUTH", "password"),
+		AzureClientID: get("AZURE_CLIENT_ID", ""),
+	}
+}
 
-	if c.Env != "local" && c.Env != "staging" && c.Env != "production" {
+// LoadDatabase reads and checks only the database settings.
+func LoadDatabase(getenv func(string) string) (Database, error) {
+	d := loadDatabase(func(k, def string) string {
+		if v := strings.TrimSpace(getenv(k)); v != "" {
+			return v
+		}
+		return def
+	})
+	var errs []error
+	d.validate(func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) })
+	return d, errors.Join(errs...)
+}
+
+func (d Database) validate(bad func(string, ...any)) {
+	if d.Env != "local" && d.Env != "staging" && d.Env != "production" {
 		bad("MONEY_ENV must be local, staging or production")
 	}
-	if c.DatabaseURL.IsZero() {
+	if d.DatabaseURL.IsZero() {
 		bad("MONEY_DATABASE_URL is required")
 	} else {
-		u, err := url.Parse(c.DatabaseURL.Reveal())
-		if c.Env != "local" && (err != nil || u.Query().Get("sslmode") != "verify-full") {
+		u, err := url.Parse(d.DatabaseURL.Reveal())
+		if d.Env != "local" && (err != nil || u.Query().Get("sslmode") != "verify-full") {
 			bad("MONEY_DATABASE_URL must use sslmode=verify-full outside local development")
 		}
-		if err == nil && c.DatabaseAuth == "entra" && u.User != nil {
+		if err == nil && d.DatabaseAuth == "entra" && u.User != nil {
 			if _, hasPassword := u.User.Password(); hasPassword {
 				bad("with MONEY_DATABASE_AUTH=entra, MONEY_DATABASE_URL carries no password: the managed identity signs in")
 			}
 		}
 	}
-	if c.DatabaseAuth != "password" && c.DatabaseAuth != "entra" {
+	if d.DatabaseAuth != "password" && d.DatabaseAuth != "entra" {
 		bad("MONEY_DATABASE_AUTH must be password or entra")
 	}
+	if d.DatabaseAuth == "entra" && d.AzureClientID == "" && d.Env != "local" {
+		bad("AZURE_CLIENT_ID is required with MONEY_DATABASE_AUTH=entra outside local development (the service's managed identity)")
+	}
+}
+
+func (c Config) validate() error {
+	var errs []error
+	bad := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
+
+	c.Database.validate(bad)
 	if c.Plaintext {
 		if c.Env != "local" {
 			bad("MONEY_INSECURE_PLAINTEXT is only allowed when MONEY_ENV=local")

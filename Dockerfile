@@ -1,8 +1,11 @@
-# Sagolik Close — web app container (Next.js standalone output).
-#   docker build -t sagolik-close .
-#   docker run -p 3000:3000 --env-file .env.production sagolik-close
-# The worker uses the same image:  docker run --env-file … sagolik-close node_modules/.bin/tsx apps/worker/src/main.ts
-# (see docs/deployment.md; not needed in demo mode).
+# Sagolik Close — two images from one Dockerfile:
+#   web     the Next.js app (standalone output), non-root
+#             docker build --target web -t sagolik-web .
+#   worker  the worker, plus the migrate and keys commands (Azure jobs), non-root
+#             docker build --target worker -t sagolik-worker .
+#             docker run sagolik-worker                                   # the worker loop
+#             docker run sagolik-worker node --import tsx apps/worker/src/migrate.ts
+# See docs/azure/runbook.md (Azure) or docs/deployment.md.
 
 FROM node:22-alpine AS base
 RUN corepack enable
@@ -37,4 +40,5 @@ FROM deps AS worker
 COPY . .
 ENV NODE_ENV=production
 USER node
-CMD ["pnpm", "worker"]
+# node is the process itself (not pnpm), so SIGTERM reaches the worker's own handler.
+CMD ["node", "--import", "tsx", "apps/worker/src/main.ts"]

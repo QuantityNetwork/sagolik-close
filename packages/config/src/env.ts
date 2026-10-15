@@ -170,14 +170,29 @@ export function parseEnv(source: Record<string, string | undefined> = process.en
 function checkKeys(env: z.infer<typeof EnvSchema>) {
   if (env.DATA_KEYS_WRAPPED && env.DATA_ENCRYPTION_KEYS) throw new EnvError("Set DATA_ENCRYPTION_KEYS or DATA_KEYS_WRAPPED, not both.");
   if (env.DATA_KEYS_WRAPPED && !env.DATA_KEK_ID) throw new EnvError("DATA_KEYS_WRAPPED needs DATA_KEK_ID (the Key Vault key that wraps them).");
-  if (env.DATA_KEK_ID && !KEY_VAULT_KEY.test(env.DATA_KEK_ID)) throw new EnvError("DATA_KEK_ID must be a Key Vault key id (https://<vault>.vault.azure.net/keys/<name>).");
+  if (env.DATA_KEK_ID && !KEY_VAULT_KEY.test(env.DATA_KEK_ID)) throw new EnvError("DATA_KEK_ID must be a Key Vault key id (https://<vault>.vault.azure.net/keys/<name>/<version>).");
+  // Unwrapping must use the version that wrapped the keys: a rotated key would otherwise break every start-up.
+  if (env.DATA_KEK_ID && !VERSIONED_KEY.test(env.DATA_KEK_ID)) throw new EnvError("DATA_KEK_ID must name the key version that wrapped the data keys (…/keys/<name>/<version>; the key ceremony prints it).");
   if (env.CHAIN_RECORDER_KEY && env.CHAIN_RECORDER_KEY_ID) throw new EnvError("Set CHAIN_RECORDER_KEY or CHAIN_RECORDER_KEY_ID, not both (prefer the Key Vault key).");
-  if (env.CHAIN_RECORDER_KEY_ID && !KEY_VAULT_KEY.test(env.CHAIN_RECORDER_KEY_ID)) throw new EnvError("CHAIN_RECORDER_KEY_ID must be a Key Vault key id (https://<vault>.vault.azure.net/keys/<name>).");
+  if (env.CHAIN_RECORDER_KEY_ID && !KEY_VAULT_KEY.test(env.CHAIN_RECORDER_KEY_ID)) throw new EnvError("CHAIN_RECORDER_KEY_ID must be a Key Vault key id (https://<vault>.vault.azure.net/keys/<name>/<version>).");
+  // The recording account is the key's address: a new key version would silently be a different account.
+  if (env.CHAIN_RECORDER_KEY_ID && !VERSIONED_KEY.test(env.CHAIN_RECORDER_KEY_ID)) throw new EnvError("CHAIN_RECORDER_KEY_ID must name the key version, since the recording account's address depends on it (the key ceremony prints it).");
   if (env.APP_ENV === "production" && env.CHAIN_RECORDER_KEY) throw new EnvError("In production the recording key lives in Key Vault: set CHAIN_RECORDER_KEY_ID instead of CHAIN_RECORDER_KEY.");
 }
 
-function checkDatabase(env: z.infer<typeof EnvSchema>) {
-  if (env.AZURE_STORAGE_BLOB_URL && !env.AZURE_STORAGE_BLOB_URL.startsWith("https://")) throw new EnvError("AZURE_STORAGE_BLOB_URL must be https.");
+const DatabaseSchema = EnvSchema.pick({ APP_ENV: true, DATABASE_URL: true, DATABASE_AUTH: true, AZURE_CLIENT_ID: true });
+export type DatabaseEnv = z.infer<typeof DatabaseSchema>;
+
+/** Only the database settings: what the migrate command needs, and nothing else of the app's configuration. */
+export function parseDatabaseEnv(source: Record<string, string | undefined> = process.env): DatabaseEnv & { DATABASE_URL: string } {
+  const parsed = DatabaseSchema.safeParse(source);
+  if (!parsed.success) throw new EnvError(`Invalid environment: ${parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")}`);
+  if (!parsed.data.DATABASE_URL) throw new EnvError("DATABASE_URL isn't set.");
+  checkDatabaseUrl(parsed.data);
+  return { ...parsed.data, DATABASE_URL: parsed.data.DATABASE_URL };
+}
+
+function checkDatabaseUrl(env: DatabaseEnv) {
   if (!env.DATABASE_URL) return;
   let url: URL;
   try {
@@ -188,11 +203,18 @@ function checkDatabase(env: z.infer<typeof EnvSchema>) {
   if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") throw new EnvError("DATABASE_URL must be a postgres:// URL.");
   if (env.APP_ENV !== "local" && url.searchParams.get("sslmode") !== "verify-full") throw new EnvError("DATABASE_URL must use sslmode=verify-full outside local development.");
   if (env.DATABASE_AUTH === "entra" && url.password) throw new EnvError("With DATABASE_AUTH=entra, DATABASE_URL carries no password: the managed identity signs in.");
+}
+
+function checkDatabase(env: z.infer<typeof EnvSchema>) {
+  if (env.AZURE_STORAGE_BLOB_URL && !env.AZURE_STORAGE_BLOB_URL.startsWith("https://")) throw new EnvError("AZURE_STORAGE_BLOB_URL must be https.");
+  if (!env.DATABASE_URL) return;
+  checkDatabaseUrl(env);
   // Supabase manages its own auth schema; the PostgreSQL store's bootstrap would replace auth.uid() there.
   if (env.NEXT_PUBLIC_SUPABASE_URL || env.SUPABASE_SERVICE_ROLE_KEY) throw new EnvError("Use either Supabase or DATABASE_URL, not both.");
   if (env.APP_ENV !== "local" && !env.AZURE_STORAGE_BLOB_URL) throw new EnvError("With DATABASE_URL outside local development, documents need durable storage: set AZURE_STORAGE_BLOB_URL.");
 }
 
+const VERSIONED_KEY = /\/keys\/[A-Za-z0-9-]+\/[0-9a-f]{32}$/;
 const KEY_VAULT_KEY = /^https:\/\/[a-z0-9-]+\.(vault\.azure\.net|managedhsm\.azure\.net)\/keys\/[A-Za-z0-9-]+(\/[0-9a-f]{32})?$/;
 const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 const PRIVATE_KEY = /^0x[0-9a-fA-F]{64}$/;

@@ -12,10 +12,13 @@
  *   … migrate --seed-demo
  *       Demo environments only: loads the fictional demo data into an empty
  *       database. Needs the app's data keys and document storage settings.
+ *
+ * Migrations need only DATABASE_URL, DATABASE_AUTH and AZURE_CLIENT_ID; the
+ * rest of the app's configuration is read for --seed-demo alone.
  */
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { getEnv } from "@sagolik/config";
+import { getEnv, parseDatabaseEnv } from "@sagolik/config";
 import { blobOrMemoryStorage, buildDemoData, loadDemoData, loadKeyRing, postgresPoolFor } from "@sagolik/core";
 import { createEntraPrincipal, createPostgresDb, grantApiRoles, migrate, upsertAuthUsers } from "@sagolik/database";
 
@@ -32,8 +35,7 @@ const { values } = parseArgs({
 });
 
 async function main() {
-  const env = getEnv();
-  if (!env.DATABASE_URL) throw new Error("DATABASE_URL isn't set.");
+  const env = parseDatabaseEnv();
   const pool = await postgresPoolFor(env);
   try {
     const result = await migrate(pool, { bootstrapFile: values.bootstrap, migrationsDir: values.migrations, log: (msg) => log("info", msg) });
@@ -56,7 +58,7 @@ async function main() {
       log("info", "granted the API roles", { role });
     }
 
-    if (values["seed-demo"]) await seedDemo(env, pool);
+    if (values["seed-demo"]) await seedDemo(getEnv(), pool);
   } finally {
     await pool.end();
   }

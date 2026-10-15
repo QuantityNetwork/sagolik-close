@@ -12,5 +12,5 @@ FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/money /money
 USER nonroot:nonroot
 EXPOSE 8443
-# Health listens on MONEY_HEALTH_ADDR (default 127.0.0.1:8081); probe it from the orchestrator's sidecar/network policy.
+# Health listens on MONEY_HEALTH_ADDR (default 127.0.0.1:8081); set it to :8081 where the platform probes it (Container Apps).
 ENTRYPOINT ["/money"]
