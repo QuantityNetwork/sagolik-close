@@ -37,6 +37,19 @@ param moneyService bool = true
 @description('Egress through Azure Firewall with an FQDN allow-list (production); otherwise a NAT gateway.')
 param egressFirewall bool = false
 
+@description('''
+standard: everything in architecture.md. lean: development with fictional data
+only, at about $100-150 a month: no Front Door (the web app has its own public
+address, optionally limited to allowedClientIps), a Basic registry. Keys, private databases and storage, managed identities and logs stay
+the same; outbound still leaves through the NAT gateway. Never for real data; the configuration refuses it with the money
+service or the firewall.
+''')
+@allowed(['standard', 'lean'])
+param costProfile string = 'standard'
+
+@description('Lean profile: client addresses (CIDR) allowed to reach the web app. Empty: anyone.')
+param allowedClientIps array = []
+
 param addressSpace string = '10.40.0.0/16'
 
 param postgres object = {
@@ -88,6 +101,9 @@ param deployerPrincipalId string = ''
 param tags object = {}
 
 var prefix = 'sagolik-${environmentName}'
+var lean = costProfile == 'lean'
+// The lean profile is for fictional data; it never carries the money service or production.
+var leanAllowed = !lean || (!moneyService && !egressFirewall && environmentName != 'prod')
 var withCeremony = phase != 'platform'
 var withApps = phase == 'apps'
 var production = environmentName == 'prod'
@@ -99,7 +115,8 @@ var allTags = union(tags, {
 })
 
 resource group 'Microsoft.Resources/resourceGroups@2024-07-01' = {
-  name: 'rg-${prefix}'
+  // A refused combination fails here, before anything is created.
+  name: leanAllowed ? 'rg-${prefix}' : fail('costProfile lean is for development with fictional data: not with the money service, the firewall or production.')
   location: location
   tags: allTags
 }
@@ -135,6 +152,8 @@ module network 'modules/network.bicep' = {
     location: location
     addressSpace: addressSpace
     egressFirewall: egressFirewall
+    // New Azure subnets get no default internet access, so even the lean profile keeps its NAT gateway.
+    publicCore: lean
     tags: allTags
   }
 }
@@ -224,6 +243,7 @@ module registry 'modules/registry.bicep' = {
     name: 'cr${replace(prefix, '-', '')}${unique}'
     location: location
     zoneRedundant: production
+    sku: lean ? 'Basic' : 'Premium'
     workspaceId: monitoring.outputs.id
     subnetId: network.outputs.subnetIds.peShared
     dnsZoneId: dns.outputs.ids['privatelink.azurecr.io']
@@ -349,6 +369,7 @@ module coreEnvironment 'modules/container-environment.bicep' = {
   params: {
     name: 'cae-${prefix}-core'
     location: location
+    internal: !lean
     subnetId: network.outputs.subnetIds.core
     zoneRedundant: production
     workloadProfiles: workloadProfiles
@@ -382,10 +403,13 @@ module moneyDns 'modules/environment-dns.bicep' = if (moneyService) {
   }
 }
 
-var appUrl = 'https://${empty(appHostName) ? frontDoorBase.outputs.endpointHostName : appHostName}'
+var appHost = lean
+  ? 'web.${coreEnvironment.outputs.defaultDomain}'
+  : empty(appHostName) ? frontDoorBase!.outputs.endpointHostName : appHostName
+var appUrl = 'https://${appHost}'
 
 // The edge exists from phase 1, so the endpoint's host name is known before the apps.
-module frontDoorBase 'modules/frontdoor.bicep' = {
+module frontDoorBase 'modules/frontdoor.bicep' = if (!lean) {
   scope: group
   name: 'frontdoor-base'
   params: {
@@ -441,6 +465,7 @@ module coreApps 'modules/core-apps.bicep' = if (withApps) {
     money: moneyService ? { url: 'https://money.${moneyEnvironment!.outputs.defaultDomain}:8443' } : {}
     chain: chain
     webScale: web
+    allowedClientIps: lean ? allowedClientIps : []
     tags: allTags
   }
 }
@@ -471,7 +496,7 @@ module moneyApps 'modules/money-apps.bicep' = if (withApps && moneyService) {
   }
 }
 
-module frontDoor 'modules/frontdoor.bicep' = if (withApps) {
+module frontDoor 'modules/frontdoor.bicep' = if (withApps && !lean) {
   scope: group
   name: 'frontdoor'
   params: {
@@ -517,12 +542,14 @@ module governance 'modules/governance.bicep' = {
 
 output resourceGroup string = group.name
 output registry string = registry.outputs.loginServer
-output frontDoorHost string = frontDoorBase.outputs.endpointHostName
-output appHost string = empty(appHostName) ? frontDoorBase.outputs.endpointHostName : appHostName
-output privateLinkRequestMessage string = frontDoorBase.outputs.privateLinkRequestMessage
+output costProfile string = costProfile
+output registryRestricted bool = registry.outputs.restricted
+output frontDoorHost string = lean ? '' : frontDoorBase!.outputs.endpointHostName
+output appHost string = appHost
+output privateLinkRequestMessage string = lean ? '' : frontDoorBase!.outputs.privateLinkRequestMessage
 output coreEnvironmentId string = coreEnvironment.outputs.id
 output moneyEnvironmentId string = moneyService ? moneyEnvironment!.outputs.id : ''
-output customDomainValidationToken string = frontDoorBase.outputs.domainValidationToken
+output customDomainValidationToken string = lean ? '' : frontDoorBase!.outputs.domainValidationToken
 output coreEnvironment string = coreEnvironment.outputs.name
 output moneyEnvironment string = moneyService ? moneyEnvironment!.outputs.name : ''
 output moneyHost string = moneyService ? 'money.${moneyEnvironment!.outputs.defaultDomain}' : ''

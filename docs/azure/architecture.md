@@ -4,7 +4,7 @@ The target platform for running Sagolik Close in a bank-grade environment. [../p
 
 ## Principles
 
-1. **Nothing but the edge is public.** Browsers and provider webhooks reach Azure Front Door, with a web application firewall. Every app, database, key vault and storage account has public access disabled and is reached over private endpoints. The registry denies public traffic too, except from the deploy pipeline's own runner for the length of a push.
+1. **Nothing but the edge is public.** Browsers and provider webhooks reach Azure Front Door, with a web application firewall. Every app, database, key vault and storage account has public access disabled and is reached over private endpoints. The registry denies public traffic too, except from the deploy pipeline's own runner for the length of a push. (Dev's lean cost profile is the one exception: it serves its web app directly, without Front Door, see [Environments](#environments-and-regions).)
 2. **No secrets in configuration.** Workloads authenticate with managed identities: to PostgreSQL (Entra tokens; no database passwords exist), Key Vault, Blob Storage and the registry. The deploy pipeline signs in with OpenID Connect, so no cloud credentials are stored in GitHub. The few remaining secrets (session secret, certificates, provider secrets) live in Key Vault and are referenced by the apps, never copied.
 3. **Keys stay in hardware.** Key-encryption keys and the deal-record signing key are generated inside HSM-backed Key Vault keys and never leave them. Apps ask Key Vault to wrap, unwrap or sign. Data keys are wrapped inside the network, by a job, so they never exist on anyone's laptop.
 4. **The money boundary is a network boundary too.** The Go money service runs in its own Container Apps environment and subnet, with its own database server and key vault. It accepts calls only from the core subnet, over mutual TLS with signed user assertions. Plaid webhooks reach it only through the WAF.
@@ -177,7 +177,7 @@ This is the next change after this one. Until then the Azure environment runs th
 
 | Environment | Purpose | Notes |
 | --- | --- | --- |
-| `dev` | The fictional demo on the real platform, with sandbox providers | Burstable database, NAT gateway instead of Azure Firewall, no money service (the demo keeps payment instructions in the app, encrypted with its own wrapped data keys), WAF in detection mode |
+| `dev` | The fictional demo on the real platform, with sandbox providers | The **lean** cost profile (`costProfile = 'lean'`): no Front Door, so the web app is served straight from the core environment's own address (`web.<environment domain>`, TLS by Container Apps), optionally limited to the addresses in `DEV_ALLOWED_IPS`. Basic registry without a private endpoint, no Defender or Sentinel, burstable database, NAT gateway instead of Azure Firewall, no money service (the demo keeps payment instructions in the app, encrypted with its own wrapped data keys). The database, vaults and storage stay private, and keys stay in the HSM. The template refuses the lean profile for `prod`, with the money service, or with the firewall |
 | `prod` | Real closings | Everything above. Its apps wait for Entra sign-in and contracted providers |
 
 Region is a parameter. **East US 2** is the default for the first market (US closings, with US data kept in the US). **Sweden Central** for European markets. Each market's data stays in its region.
@@ -186,17 +186,19 @@ Region is a parameter. **East US 2** is the default for the first market (US clo
 
 Verify in the Azure pricing calculator; these are orders of magnitude for planning, not quotes.
 
-| Item | Production | Development |
+| Item | Production | Development (lean) |
 | --- | --- | --- |
-| Front Door Premium + WAF | ~$350 + traffic | ~$350 + traffic |
-| Container Apps (consumption, zone-redundant in production) | ~$300–600 | ~$50 |
-| PostgreSQL: two servers (D4ds_v5, zone-redundant HA) / one burstable | ~$1,000–1,200 | ~$15 |
+| Front Door Premium + WAF | ~$350 + traffic | none |
+| Container Apps (consumption, zone-redundant in production) | ~$300–600 | ~$40–60 |
+| PostgreSQL: two servers (D4ds_v5, zone-redundant HA) / one burstable | ~$1,000–1,200 | ~$15–25 |
 | Azure Firewall Standard / NAT gateway | ~$900 + data | ~$35 |
-| Key Vault Premium, Storage, Container Registry Premium, private endpoints | ~$200–300 | ~$100 |
-| Log Analytics, Sentinel, Defender plans | ~$300–800, depends on volume | ~$50–100 |
-| **Total** | **roughly $3,100–4,200** | **roughly $600–700** |
+| Key Vault Premium, Storage, Container Registry (Premium / Basic), private endpoints | ~$200–300 | ~$30–40 |
+| Log Analytics, Sentinel, Defender plans | ~$300–800, depends on volume | ~$15–25 (logs only) |
+| **Total** | **roughly $3,100–4,200** | **roughly $135–185** |
 
-Managed HSM, if chosen instead of Key Vault Premium, adds about $2,300 a month. The parameter files set budgets of $5,000 (production) and $800 (development).
+The NAT gateway stays in dev: new Azure subnets have no default outbound access, so without it the apps couldn't reach Entra, the registry or the sandbox providers. Managed HSM, if chosen instead of Key Vault Premium, adds about $2,300 a month. The parameter files set budgets of $5,000 (production) and $200 (development).
+
+To run dev with production's edge and security operations (for example, to test WAF rules), set `costProfile = 'standard'` and turn Defender and Sentinel back on in `params/dev.bicepparam`: about $600–700 a month.
 
 ## What's built, and what's next
 

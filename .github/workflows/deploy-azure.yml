@@ -41,6 +41,7 @@ jobs:
       PHASE: ${{ inputs.phase }}
       LOCATION: ${{ vars.AZURE_LOCATION || 'eastus2' }}
       DEPLOYER_PRINCIPAL_ID: ${{ vars.AZURE_DEPLOYER_PRINCIPAL_ID }}
+      DEV_ALLOWED_IPS: ${{ vars.DEV_ALLOWED_IPS }}
       TEMPLATE: infra/azure/main.bicep
       PARAMETERS: infra/azure/params/${{ inputs.environment }}.bicepparam
     steps:
@@ -77,11 +78,12 @@ jobs:
             echo "RESOURCE_GROUP=$(out resourceGroup)"
             echo "REGISTRY=$(out registry)"
             echo "APP_HOST=$(out appHost)"
+            echo "REGISTRY_RESTRICTED=$(out registryRestricted)"
           } >> "$GITHUB_ENV"
 
       # The registry accepts no public traffic; this runner's address is allowed only while it pushes.
       - name: Open the registry to this runner
-        if: inputs.phase != 'platform'
+        if: inputs.phase != 'platform' && env.REGISTRY_RESTRICTED == 'true'
         run: |
           ip="$(curl -fsS https://api.ipify.org)"
           echo "RUNNER_IP=$ip" >> "$GITHUB_ENV"
@@ -93,6 +95,7 @@ jobs:
         id: images
         run: |
           set -euo pipefail
+          [ "$REGISTRY_RESTRICTED" = "true" ] || az acr login --name "${REGISTRY%%.*}"
           build() { # <name> <context> [target]
             local ref="$REGISTRY/sagolik-$1:$GITHUB_SHA"
             docker build ${3:+--target "$3"} --label "org.opencontainers.image.revision=$GITHUB_SHA" -t "$ref" "$2"
@@ -164,6 +167,8 @@ jobs:
         run: |
           set -euo pipefail
           message="$(jq -r '.privateLinkRequestMessage.value' outputs.json)"
+          # The lean profile has no Front Door, so nothing to approve.
+          [ -n "$message" ] || { echo "No Front Door in this profile."; exit 0; }
           for env in $(jq -r '.coreEnvironmentId.value, .moneyEnvironmentId.value | select(. != "")' outputs.json); do
             az rest --method get --url "https://management.azure.com$env/privateEndpointConnections?api-version=2025-07-01" -o json \
               | jq -r --arg m "$message" '.value[] | select(.properties.privateLinkServiceConnectionState.status == "Pending" and .properties.privateLinkServiceConnectionState.description == $m) | .id' \

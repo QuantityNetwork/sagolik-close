@@ -21,11 +21,11 @@ Amounts change often. Every figure below must be checked on the program's own pa
 2. Apply to Microsoft for Startups with the master prompt below. Activate credits only when we're ready to deploy dev, because they expire.
 3. Ask any investor, accelerator or incubator we're in contact with: "Are you in the Microsoft for Startups investor network, and can you refer us?"
 4. Apply to GitHub for Startups.
-5. Set the Azure budget alert (it's already in the templates: $800 a month for dev) so credits can't run out unnoticed.
+5. Set the Azure budget alert (it's already in the templates: $200 a month for dev) so credits can't run out unnoticed.
 
 ## Spend as little as possible meanwhile
 
-- Run the low-cost dev profile: about $100–150 a month instead of $600–700. Production keeps the full security setup. This drops Front Door Premium, Defender and Sentinel, and the Premium registry from dev only; dev holds fictional data only.
+- Dev runs the lean cost profile (built: `costProfile = 'lean'` in `infra/azure/params/dev.bicepparam`): about $135–185 a month instead of $600–700. It drops Front Door Premium, Defender and Sentinel, and the Premium registry from dev only; dev holds fictional data only, and the template refuses the lean profile for production. On $5,000 of credits, that's more than two years of dev.
 - Delete the dev environment when it isn't needed; it redeploys from code in about half an hour.
 - Buy reservations only for production, and only once there are customers.
 
@@ -65,7 +65,7 @@ COMPANY FACTS
   Key Vault HSM keys, Azure Database for PostgreSQL, Container Apps, Front Door
   with WAF, Microsoft Sentinel and Defender, deployed from code with GitHub
   Actions. Sign-in will move to Microsoft Entra ID.
-- What the credits pay for: a development environment now (about $100-150 a
+- What the credits pay for: a development environment now (about $135-185 a
   month in the low-cost profile), then production (about $3,100-4,200 a month
   at list prices) once the first customers sign.
 - Funding: [NEEDS ANSWER: bootstrapped or investors, amounts].

@@ -5,7 +5,7 @@ Sagolik Close on Azure, as code. Design: [docs/azure/architecture.md](../../docs
 | Path | What |
 | --- | --- |
 | `main.bicep` | One environment (subscription scope, its own resource group), in phases: `platform`, `ceremony`, `apps` |
-| `params/dev.bicepparam`, `params/prod.bicepparam` | The two environments; the pipeline sets the phase and image digests through environment variables |
+| `params/dev.bicepparam`, `params/prod.bicepparam` | The two environments; the pipeline sets the phase and image digests through environment variables. Dev uses the lean cost profile (`costProfile`), which the template refuses for production |
 | `modules/` | Network, firewall, private DNS and endpoints, Key Vault, PostgreSQL, storage, registry, Container Apps environments and apps, Front Door, RBAC, Defender, Activity Log, governance |
 | `secrets.bicep`, `scripts/set-secrets.sh` | Operator-run: puts secrets into the private vaults through Resource Manager |
 | `sql/bootstrap.sql` | What the migrations expect from PostgreSQL without Supabase (API roles, `auth.uid()`, `auth.users`) |

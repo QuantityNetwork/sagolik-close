@@ -69,10 +69,13 @@ In GitHub, open Settings, then Environments, and create `azure-dev` and `azure-p
 | `AZURE_SUBSCRIPTION_ID` | `$sub` |
 | `AZURE_DEPLOYER_PRINCIPAL_ID` | `$principal` (allows the pipeline to push images) |
 | `AZURE_LOCATION` | `eastus2` (optional) |
+| `DEV_ALLOWED_IPS` | `azure-dev` only, optional: comma-separated addresses IPv4 addresses or CIDR ranges allowed to reach dev's web app, for example the office's. Empty means anyone with the link (the data is fictional) |
 
 ## 2. Platform
 
-Run the **Deploy to Azure** workflow with environment `dev` and phase `platform`. The run prints a what-if preview, then deploys. Its summary lists the outputs: resource group, registry, Front Door host, vault names, and the money service host.
+Run the **Deploy to Azure** workflow with environment `dev` and phase `platform`. The run prints a what-if preview, then deploys. Its summary lists the outputs: resource group, registry, the app's host (`appHost`), vault names, and the money service host.
+
+Dev uses the lean cost profile ([architecture.md](architecture.md#environments-and-regions)): it has no Front Door, so its app is at `https://web.<environment domain>` (the `appHost` output), the registry takes pushes without an address window, and the Private Link approval step below has nothing to do.
 
 Restart each PostgreSQL server once, so pgaudit loads (it's a preloaded library):
 
@@ -126,9 +129,9 @@ Run the workflow with phase `apps`. It:
 1. deploys the apps and jobs, and the Front Door routes
 2. approves Front Door's Private Link requests on the environments; only requests that carry the message derived from this Front Door profile are approved
 3. runs the migrate jobs: the database schema, then the web and worker identities' database roles (in dev, also the demo data)
-4. waits for `https://<host>/api/health` to answer through Front Door, with the database in PostgreSQL mode
+4. waits for `https://<appHost>/api/health` to answer (through Front Door in production), with the database in PostgreSQL mode
 
-Then sign in once in a browser (in dev, as a demo persona). This checks that server actions work through Front Door: Next.js compares the browser's `Origin` with the `X-Forwarded-Host` that Front Door sends.
+Then sign in once in a browser (in dev, as a demo persona). In production, this checks that server actions work through Front Door: Next.js compares the browser's `Origin` with the `X-Forwarded-Host` that Front Door sends.
 
 ## Every release
 

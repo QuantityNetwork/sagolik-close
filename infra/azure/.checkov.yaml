@@ -18,3 +18,7 @@ skip-check:
   # deploy pipeline adds its own runner's address only for the length of a push
   # (hosted runners can't reach the private endpoint). Pulls stay private.
   - CKV_AZURE_139
+  # Reads only the registry's SKU, which is now a parameter: Premium everywhere
+  # except the lean dev profile (Basic, fictional data). Defender for Containers
+  # scans images in a registry of any SKU, and is on wherever real data lives.
+  - CKV_AZURE_163

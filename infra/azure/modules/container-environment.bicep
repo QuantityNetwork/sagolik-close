@@ -9,6 +9,8 @@ param zoneRedundant bool
 param workloadProfiles array
 param workspaceId string
 param tags object
+@description('Internal address only, reached through Front Door. False: the lean development profile, with a public address.')
+param internal bool = true
 
 resource environment 'Microsoft.App/managedEnvironments@2025-07-01' = {
   name: name
@@ -17,9 +19,9 @@ resource environment 'Microsoft.App/managedEnvironments@2025-07-01' = {
   properties: {
     vnetConfiguration: {
       infrastructureSubnetId: subnetId
-      internal: true
+      internal: internal
     }
-    publicNetworkAccess: 'Disabled'
+    publicNetworkAccess: internal ? 'Disabled' : 'Enabled'
     zoneRedundant: zoneRedundant
     workloadProfiles: workloadProfiles
     appLogsConfiguration: {

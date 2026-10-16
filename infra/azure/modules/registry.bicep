@@ -1,7 +1,9 @@
-// Container Registry (Premium). No admin user and no anonymous pull: the
-// workloads pull with their managed identities over the private endpoint.
-// The registry accepts no public traffic except from addresses the deploy
-// pipeline adds for the length of a push (default deny, no standing rules).
+// Container Registry. No admin user and no anonymous pull: the workloads pull
+// with their managed identities.
+//   Premium: over a private endpoint; no public traffic except from addresses
+//            the deploy pipeline adds for the length of a push.
+//   Basic:   the lean development profile (fictional data only): public, still
+//            Entra-only, no private endpoint (Basic has none).
 
 param name string
 param location string
@@ -10,36 +12,45 @@ param workspaceId string
 param subnetId string
 param dnsZoneId string
 param tags object
+@allowed(['Premium', 'Basic'])
+param sku string = 'Premium'
 @description('The deploy pipeline\'s identity, allowed to push images (empty: none).')
 param pusherPrincipalId string = ''
+
+var premium = sku == 'Premium'
 
 resource registry 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   name: name
   location: location
   tags: tags
   sku: {
-    name: 'Premium'
+    name: sku
   }
   properties: {
     adminUserEnabled: false
-    dataEndpointEnabled: true
+    dataEndpointEnabled: premium
     publicNetworkAccess: 'Enabled'
     networkRuleBypassOptions: 'AzureServices'
-    networkRuleSet: {
-      defaultAction: 'Deny'
-      ipRules: []
-    }
-    zoneRedundancy: zoneRedundant ? 'Enabled' : 'Disabled'
-    policies: {
-      retentionPolicy: {
-        status: 'enabled'
-        days: 30
-      }
-    }
+    // Network rules exist on Premium only; Basic (lean) is public, still Entra-only.
+    networkRuleSet: premium
+      ? {
+          defaultAction: 'Deny'
+          ipRules: []
+        }
+      : null
+    zoneRedundancy: premium && zoneRedundant ? 'Enabled' : 'Disabled'
+    policies: premium
+      ? {
+          retentionPolicy: {
+            status: 'enabled'
+            days: 30
+          }
+        }
+      : {}
   }
 }
 
-module endpoint 'private-endpoint.bicep' = {
+module endpoint 'private-endpoint.bicep' = if (premium) {
   name: '${name}-pe'
   params: {
     name: 'pe-${name}'
@@ -85,5 +96,6 @@ resource push 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(
 }
 
 output id string = registry.id
+output restricted bool = premium
 output name string = registry.name
 output loginServer string = registry.properties.loginServer

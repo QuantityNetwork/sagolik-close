@@ -12,6 +12,9 @@ param prefix string
 param location string
 param addressSpace string
 param egressFirewall bool
+@description('Lean development profile: the core environment has a public address, so HTTPS may come in from the internet.')
+param publicCore bool = false
+var natGateway = true
 param tags object
 
 var subnets = {
@@ -68,12 +71,31 @@ var loadBalancer = {
 }
 
 var nsgRules = {
-  core: [
-    // The environment's own infrastructure, including Front Door's Private Link connection.
-    allow('AllowWithinCore', 100, '*', [subnets.core], subnets.core, ['0-65535'])
-    loadBalancer
-    denyOtherVnetInbound
-  ]
+  core: concat(
+    [
+      // The environment's own infrastructure, including Front Door's Private Link connection.
+      allow('AllowWithinCore', 100, '*', [subnets.core], subnets.core, ['0-65535'])
+      loadBalancer
+      denyOtherVnetInbound
+    ],
+    publicCore
+      ? [
+          {
+            name: 'AllowHttpsFromInternet'
+            properties: {
+              priority: 130
+              direction: 'Inbound'
+              access: 'Allow'
+              protocol: 'Tcp'
+              sourceAddressPrefix: 'Internet'
+              sourcePortRange: '*'
+              destinationAddressPrefix: subnets.core
+              destinationPortRanges: ['80', '443']
+            }
+          }
+        ]
+      : []
+  )
   money: [
     allow('AllowCoreToMoneyApi', 100, 'Tcp', [subnets.core], subnets.money, ['8443'])
     allow('AllowWithinMoney', 110, '*', [subnets.money], subnets.money, ['0-65535'])
@@ -105,7 +127,7 @@ resource nsgs 'Microsoft.Network/networkSecurityGroups@2024-05-01' = [
   }
 ]
 
-resource natIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = if (!egressFirewall) {
+resource natIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = if (!egressFirewall && natGateway) {
   name: 'pip-${prefix}-nat'
   location: location
   tags: tags
@@ -119,7 +141,7 @@ resource natIp 'Microsoft.Network/publicIPAddresses@2024-05-01' = if (!egressFir
   }
 }
 
-resource nat 'Microsoft.Network/natGateways@2024-05-01' = if (!egressFirewall) {
+resource nat 'Microsoft.Network/natGateways@2024-05-01' = if (!egressFirewall && natGateway) {
   name: 'ng-${prefix}'
   location: location
   tags: tags
@@ -163,7 +185,7 @@ var nsgIndex = {
   peShared: 4
 }
 
-var egress = egressFirewall ? { routeTable: { id: routes.id } } : { natGateway: { id: nat.id } }
+var egress = egressFirewall ? { routeTable: { id: routes.id } } : natGateway ? { natGateway: { id: nat.id } } : {}
 
 func appSubnet(name string, prefix string, nsgId string, egress object) object => {
   name: name
@@ -239,4 +261,4 @@ output subnetIds object = {
   peShared: resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'snet-pe-shared')
   firewall: egressFirewall ? resourceId('Microsoft.Network/virtualNetworks/subnets', vnet.name, 'AzureFirewallSubnet') : ''
 }
-output egressIp string = egressFirewall ? '' : natIp!.properties.ipAddress
+output egressIp string = egressFirewall || !natGateway ? '' : natIp!.properties.ipAddress

@@ -19,6 +19,8 @@ param money object // { url } or {} without the money service
 param chain object // { network, rpcUrl, registry } ({} keeps the default)
 param webScale object // { min, max }
 param tags object
+@description('Lean profile only: client addresses allowed to reach the public web app (empty: anyone).')
+param allowedClientIps array = []
 
 func secret(vaultUri string, name string, identityId string) object => {
   name: name
@@ -124,6 +126,13 @@ resource web 'Microsoft.App/containerApps@2025-07-01' = {
         targetPort: 3000
         transport: 'http'
         allowInsecure: false
+        ipSecurityRestrictions: [
+          for (ip, i) in allowedClientIps: {
+            name: 'allowed-${i}'
+            action: 'Allow'
+            ipAddressRange: contains(trim(ip), '/') ? trim(ip) : '${trim(ip)}/32'
+          }
+        ]
       }
       registries: [
         {
